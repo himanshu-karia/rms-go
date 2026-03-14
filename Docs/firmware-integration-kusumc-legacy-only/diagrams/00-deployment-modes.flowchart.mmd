@@ -1,0 +1,22 @@
+%%{init: {'theme': 'forest'}}%%
+flowchart TD
+  %% Deployment modes for firmware integration
+  A[Device Firmware] -->|REST calls| B{REST Base URL}
+
+  B -->|Integration / bring-up| H[HTTP REST HOST:8081]
+  B -->|Prod-like TLS via Nginx| S[HTTPS REST HOST:443]
+
+  A -->|MQTT connect| C{MQTT Broker URL}
+  C -->|Integration plain| M[MQTT HOST:1884]
+  C -->|Prod-like TLS| T[MQTTS HOST:8883]
+
+  subgraph Notes
+    N1["/api/bootstrap requires x-api-key; returns primary_broker endpoints[]"]
+    N2["/api/device-open/* is device-facing; use /api/device-open for new firmware"]
+    N3["Advertised endpoints can be controlled by MQTT_PUBLIC_PROTOCOL/HOST/PORT or MQTT_PUBLIC_URLS"]
+  end
+
+  H --> N1
+  S --> N1
+  M --> N3
+  T --> N3

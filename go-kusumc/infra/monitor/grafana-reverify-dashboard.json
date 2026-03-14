@@ -1,0 +1,50 @@
+{
+  "id": null,
+  "title": "Reverify Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Last Run Age (min)",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "PROM"},
+      "targets": [
+        {
+          "expr": "(time() - reverify_last_run_timestamp_seconds) / 60",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 45}, {"color": "red", "value": 60}]}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Processed vs Recovered (per project)",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "PROM"},
+      "targets": [
+        {"expr": "sum by (project) (rate(reverify_processed_total_total[5m]))", "refId": "A", "legendFormat": "processed {{project}}"},
+        {"expr": "sum by (project) (rate(reverify_recovered_total_total[5m]))", "refId": "B", "legendFormat": "recovered {{project}}"}
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []}
+    }
+  ],
+  "templating": {"list": []},
+  "annotations": {"list": []}
+}

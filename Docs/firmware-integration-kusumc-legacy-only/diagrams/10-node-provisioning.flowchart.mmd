@@ -1,0 +1,13 @@
+%%{init: {'theme': 'forest'}}%%
+flowchart TD
+  UI[Operator/UI] -->|Attach nodeId| API[Go API]
+  API -->|Persist link| DB[(Postgres/Timescale)]
+
+  GW[Firmware Gateway] -->|GET /api/device-open/nodes?imei=GW_IMEI| API
+  API -->|Return attached nodes| GW
+
+  CHILD[Child Node] -->|Telemetry via mesh link| GW
+  GW -->|Publish forwarded_data as gateway identity\nmetadata.origin_node_id\nmetadata.route| MQ[(MQTT Broker)]
+  MQ -->|GW_IMEI data topic| API
+
+  API -->|Validate + dedup by origin + msgid| DB

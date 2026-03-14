@@ -1,0 +1,35 @@
+**********************
+PowerShell transcript start
+Start time: 20260304221657
+Username: DESKTOP-NQU91IL\Autogrid
+RunAs User: DESKTOP-NQU91IL\Autogrid
+Configuration Name: 
+Machine: DESKTOP-NQU91IL (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -noexit -command try { . "c:\Users\Autogrid\AppData\Local\Programs\Microsoft VS Code\072586267e\resources\app\out\vs\workbench\contrib\terminal\common\scripts\shellIntegration.ps1" } catch {}
+Process ID: 24620
+PSVersion: 7.5.4
+PSEdition: Core
+GitCommitId: 7.5.4
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+Transcript started, output file is c:/Project-Play/Unified-IoT-Portal-18-Jan/rms-go/app-kusumc/long-chain-transcript.txt
+
+=== Build and refresh backend stack ===
+error during connect: Get "http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/v1.5
+1/containers/json?all=1&filters=%7B%22label%22%3A%7B%22com.docker.compose.config
+-hash%22%3Atrue%2C%22com.docker.compose.oneoff%3DFalse%22%3Atrue%2C%22com.docker
+.compose.project%3Dgo-kusumc%22%3Atrue%7D%7D": open //./pipe/dockerDesktopLinuxE
+ngine: The system cannot find the file specified.
+PS>TerminatingError(): "docker compose down failed with exit code 1"
+>> TerminatingError(): "docker compose down failed with exit code 1"
+>> TerminatingError(): "docker compose down failed with exit code 1"
+>> TerminatingError(): "docker compose down failed with exit code 1"
+**********************
+PowerShell transcript end
+End time: 20260304233344
+**********************

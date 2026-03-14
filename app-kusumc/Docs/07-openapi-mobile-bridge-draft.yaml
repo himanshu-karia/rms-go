@@ -1,0 +1,378 @@
+openapi: 3.0.3
+info:
+  title: RMS Mobile Bridge API
+  version: 1.0.0
+  description: Stable v1 contract for Android field bridge integration with go-kusumc.
+servers:
+  - url: /api/mobile
+security:
+  - bearerAuth: []
+paths:
+  /auth/request-otp:
+    post:
+      tags: [Auth]
+      summary: Request login OTP for mobile user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestOtpRequest'
+      responses:
+        '200':
+          description: OTP accepted for delivery
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestOtpResponse'
+        '400':
+          $ref: '#/components/responses/ApiError'
+
+  /auth/verify:
+    post:
+      tags: [Auth]
+      summary: Verify OTP and create mobile session tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOtpRequest'
+      responses:
+        '200':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyOtpResponse'
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh mobile access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshTokenResponse'
+        '401':
+          $ref: '#/components/responses/ApiError'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke active mobile session
+      requestBody:
+        required: false
+      responses:
+        '200':
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+        '401':
+          $ref: '#/components/responses/ApiError'
+
+  /me/assignments:
+    get:
+      tags: [Assignments]
+      summary: List assigned project/device scope for authenticated mobile user
+      responses:
+        '200':
+          description: Assignment list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentsResponse'
+        '401':
+          $ref: '#/components/responses/ApiError'
+
+  /ingest:
+    post:
+      tags: [Ingest]
+      summary: Upload packet batch captured locally by mobile bridge
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PacketBatchIngestRequest'
+      responses:
+        '200':
+          description: Ingest result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PacketBatchIngestResponse'
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+
+  /commands/{id}/status:
+    get:
+      tags: [Commands]
+      summary: Query command lifecycle status for mobile-issued command
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Command status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandStatusResponse'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    ApiError:
+      description: Standard API error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+
+  schemas:
+    ApiErrorResponse:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+          nullable: true
+        request_id:
+          type: string
+        error:
+          type: string
+          description: Legacy compatibility field mirroring message.
+
+    RequestOtpRequest:
+      type: object
+      required: [phone, device_fingerprint, app_version]
+      properties:
+        phone:
+          type: string
+        device_fingerprint:
+          type: string
+        device_name:
+          type: string
+        app_version:
+          type: string
+
+    RequestOtpResponse:
+      type: object
+      required: [status, otp_ref]
+      properties:
+        status:
+          type: string
+          enum: [sent, throttled]
+        otp_ref:
+          type: string
+        retry_after_sec:
+          type: integer
+          nullable: true
+
+    VerifyOtpRequest:
+      type: object
+      required: [phone, otp, otp_ref]
+      properties:
+        phone:
+          type: string
+        otp:
+          type: string
+        otp_ref:
+          type: string
+
+    VerifyOtpResponse:
+      type: object
+      required: [access_token, refresh_token, expires_in_sec, token_type]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in_sec:
+          type: integer
+        user:
+          $ref: '#/components/schemas/MobileUser'
+
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    RefreshTokenResponse:
+      type: object
+      required: [access_token, refresh_token, expires_in_sec, token_type]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in_sec:
+          type: integer
+
+    LogoutResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [logged_out]
+
+    MobileUser:
+      type: object
+      properties:
+        id:
+          type: string
+        phone:
+          type: string
+        display_name:
+          type: string
+
+    AssignmentsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssignmentItem'
+
+    AssignmentItem:
+      type: object
+      required: [project_id]
+      properties:
+        project_id:
+          type: string
+        project_name:
+          type: string
+        device_id:
+          type: string
+          nullable: true
+        imei:
+          type: string
+          nullable: true
+        role:
+          type: string
+
+    PacketBatchIngestRequest:
+      type: object
+      required: [project_id, device_id, packets]
+      properties:
+        project_id:
+          type: string
+        device_id:
+          type: string
+        packets:
+          type: array
+          items:
+            $ref: '#/components/schemas/BridgePacket'
+
+    BridgePacket:
+      type: object
+      required: [idempotency_key, captured_at, topic_suffix, raw_payload]
+      properties:
+        idempotency_key:
+          type: string
+        captured_at:
+          type: string
+          format: date-time
+        topic_suffix:
+          type: string
+          enum: [heartbeat, data, daq, ondemand, errors]
+        raw_payload:
+          type: object
+          additionalProperties: true
+
+    PacketBatchIngestResponse:
+      type: object
+      required: [accepted, duplicates, rejected, results]
+      properties:
+        accepted:
+          type: integer
+        duplicates:
+          type: integer
+        rejected:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PacketIngestResult'
+
+    PacketIngestResult:
+      type: object
+      required: [idempotency_key, status]
+      properties:
+        idempotency_key:
+          type: string
+        status:
+          type: string
+          enum: [accepted, duplicate, rejected]
+        reason:
+          type: string
+          nullable: true
+
+    CommandStatusResponse:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [queued, sent, acked, failed, timed_out]
+        updated_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+          nullable: true

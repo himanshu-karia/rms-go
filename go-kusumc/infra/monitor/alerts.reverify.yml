@@ -1,0 +1,29 @@
+groups:
+  - name: reverify.rules
+    rules:
+      - alert: ReverifyJobMissing
+        expr: absent(reverify_last_run_timestamp_seconds)
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Reverify metrics missing
+          description: No reverify metrics scraped for 10m; scheduler or service may be down.
+
+      - alert: ReverifyStaleRun
+        expr: time() - reverify_last_run_timestamp_seconds > 3600
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Reverify job stale
+          description: Last reverify batch started more than 60 minutes ago (value {{ $value }}s ago).
+
+      - alert: ReverifyRecoverySpike
+        expr: sum by (project) (rate(reverify_recovered_total_total[15m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Reverify recovering packets
+          description: Reverify recovered packets in the last 15m for project {{ $labels.project }}; inspect ingestion quality and recent publishes.

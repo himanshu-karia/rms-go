@@ -1,0 +1,14 @@
+%%{init: {'theme': 'forest'}}%%
+sequenceDiagram
+  autonumber
+  actor FW as Firmware
+  participant API as Go API (REST)
+  participant DB as Postgres/Timescale
+
+  FW->>API: GET /api/bootstrap?imei=...\nHeader: x-api-key
+  API->>DB: Lookup device by IMEI\n+ installation + beneficiary\n+ vfd_model (if assigned)
+  DB-->>API: device + context + credential bundle
+  API-->>FW: 200 JSON bootstrap\nprimary_broker.endpoints[]\npublish_topics[]\nsubscribe_topics[]\n(optional) govt_broker
+  Note over API,FW: API may also set header X-Device-JWT for device-scoped auth helpers
+
+  FW->>FW: Pick broker URL from primary_broker.endpoints[]\nPrefer mqtts:// when available

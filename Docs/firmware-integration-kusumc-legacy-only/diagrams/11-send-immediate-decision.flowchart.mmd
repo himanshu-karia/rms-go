@@ -1,0 +1,6 @@
+%%{init: {'theme': 'forest'}}%%
+flowchart TD
+  A[Receive command: send_immediate] --> B{Time to next periodic publish <= 30s?}
+  B -->|Yes| C[Do NOT burst\nPublish ondemand_rsp\nstatus=wait code=2]
+  B -->|No| D[Publish immediate burst\n1..N telemetry packets]
+  D --> E[Publish ondemand_rsp\nstatus=ack code=0]

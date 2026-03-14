@@ -1,0 +1,107 @@
+{
+  "project": {
+    "scopeKey": "project:rms_project", 
+    "packetSchemas": {
+      "heartbeat": {
+        "packetType": "heartbeat",
+        "topicTemplate": "channels/{projectId}/messages/{imei}",
+        "envelopeKeys": [
+          {"key": "packet_type", "required": true},
+          {"key": "project_id", "required": true},
+          {"key": "protocol_id", "required": true},
+          {"key": "contractor_id", "required": false},
+          {"key": "supplier_id", "required": false},
+          {"key": "manufacturer_id", "required": false},
+          {"key": "device_id", "required": true},
+          {"key": "imei", "required": true},
+          {"key": "ts", "required": true},
+          {"key": "msg_id", "required": false}
+        ],
+        "keys": [
+          {"key": "VD"}, {"key": "TIMESTAMP", "required": true}, {"key": "DATE"}, {"key": "IMEI"}, {"key": "ASN"}, {"key": "RTCDATE"}, {"key": "RTCTIME"}, {"key": "LAT"}, {"key": "LONG"}, {"key": "RSSI"}, {"key": "STINTERVAL"}, {"key": "POTP"}, {"key": "COTP"}, {"key": "GSM"}, {"key": "SIM"}, {"key": "NET"}, {"key": "GPRS"}, {"key": "SD"}, {"key": "ONLINE"}, {"key": "GPS"}, {"key": "GPSLOC"}, {"key": "RF"}, {"key": "TEMP"}, {"key": "SIMSLOT"}, {"key": "SIMCHNGCNT"}, {"key": "FLASH"}, {"key": "BATTST"}, {"key": "VBATT"}, {"key": "PST"}
+        ]
+      },
+      "pump": {
+        "packetType": "pump",
+        "topicTemplate": "channels/{projectId}/messages/{imei}",
+        "envelopeKeys": [
+          {"key": "packet_type", "required": true},
+          {"key": "project_id", "required": true},
+          {"key": "protocol_id", "required": true},
+          {"key": "contractor_id", "required": false},
+          {"key": "supplier_id", "required": false},
+          {"key": "manufacturer_id", "required": false},
+          {"key": "device_id", "required": true},
+          {"key": "imei", "required": true},
+          {"key": "ts", "required": true},
+          {"key": "msg_id", "required": false}
+        ],
+        "keys": [
+          {"key": "VD"}, {"key": "TIMESTAMP", "required": true}, {"key": "DATE"}, {"key": "IMEI"}, {"key": "ASN"},
+          {"key": "PDKWH1"}, {"key": "PTOTKWH1"}, {"key": "POPDWD1"}, {"key": "POPTOTWD1"}, {"key": "PDHR1"}, {"key": "PTOTHR1"}, {"key": "POPKW1"},
+          {"key": "MAXINDEX"}, {"key": "INDEX"}, {"key": "LOAD"}, {"key": "STINTERVAL"}, {"key": "POTP"}, {"key": "COTP"},
+          {"key": "PMAXFREQ1"}, {"key": "PFREQLSP1"}, {"key": "PFREQHSP1"}, {"key": "PCNTRMODE1"}, {"key": "PRUNST1"},
+          {"key": "POPFREQ1"}, {"key": "POPI1"}, {"key": "POPV1"}, {"key": "PDC1V1"}, {"key": "PDC1I1"}, {"key": "PDCVOC1"}, {"key": "POPFLW1"}
+        ]
+      },
+      "daq": {
+        "packetType": "daq",
+        "topicTemplate": "channels/{projectId}/messages/{imei}",
+        "envelopeKeys": [
+          {"key": "packet_type", "required": true},
+          {"key": "project_id", "required": true},
+          {"key": "protocol_id", "required": true},
+          {"key": "contractor_id", "required": false},
+          {"key": "supplier_id", "required": false},
+          {"key": "manufacturer_id", "required": false},
+          {"key": "device_id", "required": true},
+          {"key": "imei", "required": true},
+          {"key": "ts", "required": true},
+          {"key": "msg_id", "required": false}
+        ],
+        "keys": [
+          {"key": "VD"}, {"key": "TIMESTAMP", "required": true}, {"key": "MAXINDEX"}, {"key": "INDEX"}, {"key": "LOAD"}, {"key": "STINTERVAL"}, {"key": "MSGID"}, {"key": "DATE"}, {"key": "IMEI"}, {"key": "ASN"}, {"key": "POTP"}, {"key": "COTP"},
+          {"key": "AI11"}, {"key": "AI21"}, {"key": "AI31"}, {"key": "AI41"}, {"key": "DI11"}, {"key": "DI21"}, {"key": "DI31"}, {"key": "DI41"}, {"key": "DO11"}, {"key": "DO21"}, {"key": "DO31"}, {"key": "DO41"}
+        ]
+      },
+      "ondemand_cmd": {
+        "packetType": "ondemand_cmd",
+        "topicTemplate": "channels/{projectId}/messages/{imei}",
+        "envelopeKeys": [
+          {"key": "packet_type", "required": true},
+          {"key": "project_id", "required": true},
+          {"key": "protocol_id", "required": true},
+          {"key": "contractor_id", "required": false},
+          {"key": "supplier_id", "required": false},
+          {"key": "manufacturer_id", "required": false},
+          {"key": "device_id", "required": true},
+          {"key": "imei", "required": true},
+          {"key": "ts", "required": true},
+          {"key": "msg_id", "required": true}
+        ],
+        "keys": [
+          {"key": "msgid", "required": true}, {"key": "COTP"}, {"key": "POTP"}, {"key": "timestamp", "required": true}, {"key": "type"}, {"key": "cmd"}, {"key": "DO1"}
+        ]
+      },
+      "ondemand_rsp": {
+        "packetType": "ondemand_rsp",
+        "topicTemplate": "channels/{projectId}/messages/{imei}",
+        "envelopeKeys": [
+          {"key": "packet_type", "required": true},
+          {"key": "project_id", "required": true},
+          {"key": "protocol_id", "required": true},
+          {"key": "contractor_id", "required": false},
+          {"key": "supplier_id", "required": false},
+          {"key": "manufacturer_id", "required": false},
+          {"key": "device_id", "required": true},
+          {"key": "imei", "required": true},
+          {"key": "ts", "required": true},
+          {"key": "msg_id", "required": true}
+        ],
+        "keys": [
+          {"key": "timestamp", "required": true}, {"key": "status"}, {"key": "DO1"}, {"key": "PRUNST1"}, {"key": "msgid"}
+        ]
+      }
+    }
+  }
+}

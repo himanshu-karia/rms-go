@@ -1,0 +1,92 @@
+[regions.eu868]
+  enabled=true
+  
+  # Region description.
+  description="EU868"
+  
+  # Region common-name.
+  common_name="EU868"
+  
+  # Gateway stats interval.
+  gateway_stats_interval="24h0m0s"
+  
+  # Device session TTL.
+  device_session_ttl="720h0m0s"
+  
+  # Uplink data rate.
+  #
+  # The default data rate to use for uplink communication.
+  uplink_dr=5
+  
+  # Downlink data rate.
+  #
+  # The default data rate to use for downlink communication.
+  downlink_dr=5
+  
+  # Data-rate offset.
+  #
+  # The default data rate offset to use for downlink communication.
+  downlink_dr_offset=0
+  
+  # Join-accept delay 1.
+  #
+  # The join-accept delay 1 to use (in seconds).
+  join_accept_delay1=5
+  
+  # Join-accept delay 2.
+  #
+  # The join-accept delay 2 to use (in seconds).
+  join_accept_delay2=6
+  
+  # RX1 delay.
+  #
+  # The delay to use for RX1 (in seconds).
+  rx1_delay=1
+  
+  # RX1 data rate offset.
+  #
+  # The offset to use for the RX1 data rate.
+  rx1_dr_offset=0
+  
+  # RX2 data rate.
+  #
+  # The data rate to use for RX2.
+  rx2_dr=0
+  
+  # RX2 frequency.
+  #
+  # The frequency to use for RX2.
+  rx2_frequency=869525000
+  
+  # Uplink max EIRP.
+  #
+  # The max EIRP to use for uplink communication (in dBm).
+  uplink_max_eirp=16
+  
+  # Class-B ping-slot periodicity.
+  #
+  # The periodicity to use for Class-B ping-slots.
+  class_b_ping_slot_periodicity=0
+  
+  # Class-B ping-slot data rate.
+  #
+  # The data rate to use for Class-B ping-slots.
+  class_b_ping_slot_dr=0
+  
+  # Class-B ping-slot frequency.
+  #
+  # The frequency to use for Class-B ping-slots (in Hz).
+  class_b_ping_slot_frequency=869525000
+  
+  # Network root keys.
+  #
+  # The root keys to use for the network.
+  network_root_keys=[]
+  
+  # Gateway backend configuration.
+  [regions.eu868.gateway]
+    backend.type="mqtt"
+    backend.mqtt.topic_prefix="eu868"
+    backend.mqtt.server="tcp://emqx:1883"
+    backend.mqtt.username=""
+    backend.mqtt.password=""

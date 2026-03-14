@@ -1,0 +1,266 @@
+services:
+  ingestion-go:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+      emqx:
+        condition: service_healthy
+      emqx-bootstrapper:
+        condition: service_completed_successfully
+    environment:
+      - GO_PORT=${GO_PORT:-8081}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - TIMESCALE_URI=${TIMESCALE_URI:-postgres://postgres:password@timescaledb:5432/telemetry}
+      - MQTT_HOST=${INTERNAL_MQTT_HOST:-emqx}
+      - MQTT_PORT=${INTERNAL_MQTT_PORT:-1883}
+      - MQTT_URL=${INTERNAL_MQTT_URL:-tcp://emqx:1883}
+      - SERVICE_MQTT_USERNAME=${SERVICE_MQTT_USERNAME:-backend-service}
+      - SERVICE_MQTT_PASSWORD=${SERVICE_MQTT_PASSWORD:-change-me}
+      - SERVICE_MQTT_PUB_TOPICS=${SERVICE_MQTT_PUB_TOPICS:-+/ondemand,channels/+/alerts}
+      - SERVICE_MQTT_SUB_TOPICS=${SERVICE_MQTT_SUB_TOPICS:-+/heartbeat,+/data,+/daq,+/ondemand,+/errors,channels/+/messages/+,devices/+/telemetry,device/+/connected,channels/+/commands/+/resp,channels/+/commands/+/ack,channels/+/alerts}
+      - MQTT_PUBLIC_HOST=${PUBLIC_MQTT_HOST:-rms-iot.local}
+      - MQTT_PUBLIC_PORT=${PUBLIC_MQTT_PORT:-18883}
+      - MQTT_PUBLIC_PROTOCOL=${PUBLIC_MQTT_PROTOCOL:-mqtts}
+      - MQTT_JOB_POLL_INTERVAL_MS=${MQTT_JOB_POLL_INTERVAL_MS:-1000}
+      - INGEST_DEADLETTER_REPLAY_ENABLED=${INGEST_DEADLETTER_REPLAY_ENABLED:-true}
+      - INGEST_DEADLETTER_REPLAY_INTERVAL_MS=${INGEST_DEADLETTER_REPLAY_INTERVAL_MS:-15000}
+      - INGEST_DEADLETTER_REPLAY_BATCH=${INGEST_DEADLETTER_REPLAY_BATCH:-50}
+      - INGEST_DEADLETTER_REQUEUE_MAX=${INGEST_DEADLETTER_REQUEUE_MAX:-10000}
+      - INGEST_DEADLETTER_REQUEUE_TTL_HOURS=${INGEST_DEADLETTER_REQUEUE_TTL_HOURS:-168}
+      - AUTH_SECRET=${AUTH_SECRET:-dev-secret}
+      - GOVT_CREDS_KEY=${GOVT_CREDS_KEY:-Zf4Qp7sL1rX9eV2hB6cN8yT0uM5gK3dA}
+      - EMQX_API_URL=${EMQX_API_URL:-http://emqx:18083/api/v5}
+      - EMQX_DASHBOARD_USER=${EMQX_DASHBOARD_USER:-admin}
+      - EMQX_DASHBOARD_PASSWORD=${EMQX_DASHBOARD_PASSWORD:-public}
+      - EMQX_APP_ID=${EMQX_APP_ID:-admin}
+      - EMQX_APP_SECRET=${EMQX_APP_SECRET:-public}
+    volumes:
+      - ./infra/nginx/certs:/etc/shared-certs:ro
+    networks:
+      - v2-net
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - v2-net
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    restart: unless-stopped
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-telemetry}
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./schemas/v1_init.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./schemas/v1_verticals.sql:/docker-entrypoint-initdb.d/02_verticals.sql
+      - timescaledb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-telemetry}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - v2-net
+
+  db-migrations:
+    image: timescale/timescaledb:latest-pg15
+    restart: on-failure
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=${POSTGRES_PASSWORD:-password}
+    command: >
+      /bin/sh -c "
+      until pg_isready -h timescaledb -U postgres -d telemetry; do sleep 1; done;
+      psql -h timescaledb -U postgres -d telemetry -f /migrations/v1_project_dna.sql;
+      psql -h timescaledb -U postgres -d telemetry -f /migrations/v2_credential_history.sql;
+      psql -h timescaledb -U postgres -d telemetry -f /migrations/devices_patch.sql;
+      psql -h timescaledb -U postgres -d telemetry -f /migrations/v7_command_control.sql;
+      psql -h timescaledb -U postgres -d telemetry -f /migrations/v8_mesh_nodes.sql;
+      "
+    volumes:
+      - ./schemas/v1_project_dna.sql:/migrations/v1_project_dna.sql:ro
+      - ./schemas/v2_credential_history.sql:/migrations/v2_credential_history.sql:ro
+      - ./schemas/devices_patch.sql:/migrations/devices_patch.sql:ro
+      - ./schemas/v7_command_control.sql:/migrations/v7_command_control.sql:ro
+      - ./schemas/v8_mesh_nodes.sql:/migrations/v8_mesh_nodes.sql:ro
+    networks:
+      - v2-net
+
+  emqx:
+    image: emqx/emqx:5.3
+    restart: unless-stopped
+    environment:
+      - EMQX_ALLOW_ANONYMOUS=false
+      - EMQX_NODE__COOKIE=unified-emqx-cookie
+      - EMQX_LISTENERS__SSL__DEFAULT__BIND=0.0.0.0:8883
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE=${EMQX_SSL_CERTFILE:-/opt/emqx/certs/localhost-certs/rms-local.crt}
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__KEYFILE=${EMQX_SSL_KEYFILE:-/opt/emqx/certs/localhost-certs/rms-local.key}
+      - EMQX_LISTENERS__WS__DEFAULT__ENABLE=true
+      - EMQX_LISTENERS__WS__DEFAULT__MQTT__PATH=/mqtt
+      - EMQX_LISTENERS__WSS__DEFAULT__BIND=0.0.0.0:8084
+      - EMQX_LISTENERS__WSS__DEFAULT__ENABLE=true
+      - EMQX_LISTENERS__WSS__DEFAULT__MQTT__PATH=/mqtt
+      - EMQX_LISTENERS__WSS__DEFAULT__SSL_OPTIONS__CERTFILE=${EMQX_WSS_CERTFILE:-/opt/emqx/certs/localhost-certs/rms-local.crt}
+      - EMQX_LISTENERS__WSS__DEFAULT__SSL_OPTIONS__KEYFILE=${EMQX_WSS_KEYFILE:-/opt/emqx/certs/localhost-certs/rms-local.key}
+      - EMQX_AUTHN__PASSWORD_BASED__1__MECHANISM=password
+      - EMQX_AUTHN__PASSWORD_BASED__1__BACKEND=built_in_database
+      - EMQX_AUTHN__PASSWORD_BASED__1__PASSWORD_HASH_ALGORITHM=bcrypt
+      - EMQX_AUTHORIZATION__SOURCES__1__TYPE=built_in_database
+    volumes:
+      - ./infra/nginx/certs:/opt/emqx/certs:ro
+      - ${DEPLOY_CERTS_DIR:-./infra/nginx/certs/hkbase.in-certs}:/opt/deploy-certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "emqx ctl status || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    networks:
+      - v2-net
+
+  emqx-bootstrapper:
+    image: golang:1.21-bullseye
+    restart: on-failure
+    working_dir: /workspace
+    depends_on:
+      emqx:
+        condition: service_healthy
+    environment:
+      - GOTOOLCHAIN=auto
+      - EMQX_API_URL=${EMQX_API_URL:-http://emqx:18083/api/v5}
+      - EMQX_APP_ID=${EMQX_APP_ID:-admin}
+      - EMQX_APP_SECRET=${EMQX_APP_SECRET:-public}
+      - EMQX_FALLBACK_APP_ID=${EMQX_FALLBACK_APP_ID:-admin}
+      - EMQX_FALLBACK_APP_SECRET=${EMQX_FALLBACK_APP_SECRET:-public}
+      - EMQX_DASHBOARD_USER=${EMQX_DASHBOARD_USER:-admin}
+      - EMQX_DASHBOARD_PASSWORD=${EMQX_DASHBOARD_PASSWORD:-public}
+      - SERVICE_MQTT_USERNAME=${SERVICE_MQTT_USERNAME:-backend-service}
+      - SERVICE_MQTT_PASSWORD=${SERVICE_MQTT_PASSWORD:-change-me}
+      - SERVICE_MQTT_PUB_TOPICS=${SERVICE_MQTT_PUB_TOPICS:-+/ondemand,channels/+/alerts}
+      - SERVICE_MQTT_SUB_TOPICS=${SERVICE_MQTT_SUB_TOPICS:-+/heartbeat,+/data,+/daq,+/ondemand,+/errors,channels/+/messages/+,devices/+/telemetry,device/+/connected,channels/+/commands/+/resp,channels/+/commands/+/ack,channels/+/alerts}
+    volumes:
+      - ./:/workspace
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - set -euo pipefail; export PATH=/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; go run ./cmd/bootstrap_emqx
+    networks:
+      - v2-net
+
+  # --- Reverse Proxy (Entrypoint) ---
+  nginx:
+    image: nginx:latest
+    restart: unless-stopped
+    environment:
+      - NGINX_SSL_CERT=${NGINX_SSL_CERT:-/etc/nginx/certs/localhost-certs/rms-local.crt}
+      - NGINX_SSL_KEY=${NGINX_SSL_KEY:-/etc/nginx/certs/localhost-certs/rms-local.key}
+      - NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx
+    ports:
+      - "${PUBLIC_HTTP_PORT:-7080}:80"
+      - "${PUBLIC_HTTPS_PORT:-7443}:443"
+      - "${PUBLIC_MQTTS_PORT:-18883}:8883" # MQTTS
+    volumes:
+      - ./infra/nginx/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
+      - ./infra/nginx/certs:/etc/nginx/certs:ro
+      - ${DEPLOY_CERTS_DIR:-./infra/nginx/certs/hkbase.in-certs}:/etc/deploy-certs:ro
+    depends_on:
+      ingestion-go:
+        condition: service_started
+      emqx:
+        condition: service_healthy
+    networks:
+      - v2-net
+
+  # --- LoRaWAN Stack ---
+  chirpstack-gateway-bridge:
+    image: chirpstack/chirpstack-gateway-bridge:4
+    restart: unless-stopped
+    profiles:
+      - lorawan
+    environment:
+      - INTEGRATION__MQTT__SERVER=tcp://emqx:1883
+    depends_on:
+      - emqx
+    networks:
+      - v2-net
+
+  chirpstack:
+    image: chirpstack/chirpstack:4
+    restart: unless-stopped
+    profiles:
+      - lorawan
+    command: -c /etc/chirpstack
+    volumes:
+      - ./infra/chirpstack/chirpstack.toml:/etc/chirpstack/chirpstack.toml:ro
+    depends_on:
+      chirpstack-postgres:
+        condition: service_healthy
+      chirpstack-redis:
+        condition: service_started
+      emqx:
+        condition: service_healthy
+    environment:
+      - DB_postgresql=postgres://chirpstack:chirpstack@chirpstack-postgres/chirpstack?sslmode=disable
+      - REDIS_SERVERS=redis://chirpstack-redis:6379
+      - NETWORK__ENABLED_REGIONS="eu868"
+    networks:
+      - v2-net
+
+  chirpstack-postgres:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    profiles:
+      - lorawan
+    environment:
+      - POSTGRES_PASSWORD=chirpstack
+      - POSTGRES_USER=chirpstack
+      - POSTGRES_DB=chirpstack
+    volumes:
+      - ./infra/chirpstack/init/01_extensions.sql:/docker-entrypoint-initdb.d/01_extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chirpstack -d chirpstack"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - v2-net
+
+  chirpstack-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    profiles:
+      - lorawan
+    networks:
+      - v2-net
+
+  # --- Observability ---
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./infra/monitor/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - v2-net
+
+networks:
+  v2-net:
+    driver: bridge
+
+volumes:
+  timescaledb_data:

@@ -1,0 +1,125 @@
+---
+title: Core + PM-KUSUM (new-db-schema)
+---
+erDiagram
+  direction LR
+
+  organizations {
+    uuid id PK
+    uuid parent_id FK
+    text name
+  }
+
+  users {
+    uuid id PK
+    uuid org_id FK
+    text username UK
+  }
+
+  projects {
+    text id PK
+    text name
+  }
+
+  devices {
+    uuid id PK
+    text imei UK
+    text project_id FK
+  }
+
+  telemetry {
+    timestamptz time
+    uuid device_id
+    text project_id
+  }
+
+  protocols {
+    uuid id PK
+    text project_id FK
+    uuid server_vendor_org_id FK
+  }
+
+  mqtt_provisioning_jobs {
+    uuid id PK
+    uuid device_id FK
+    uuid credential_history_id FK
+  }
+
+  credential_history {
+    uuid id PK
+    uuid device_id FK
+  }
+
+  states {
+    uuid id PK
+    text name
+  }
+
+  authorities {
+    uuid id PK
+    uuid state_id FK
+  }
+
+  beneficiaries {
+    uuid id PK
+    text project_id FK
+    uuid state_id FK
+  }
+
+  vfd_manufacturers {
+    uuid id PK
+    text project_id FK
+  }
+
+  vfd_models {
+    uuid id PK
+    text project_id FK
+    uuid manufacturer_id FK
+  }
+
+  protocol_vfd_assignments {
+    uuid id PK
+    text project_id FK
+    uuid protocol_id FK
+    uuid vfd_model_id FK
+  }
+
+  installations {
+    uuid id PK
+    uuid device_id FK
+    text project_id FK
+    uuid beneficiary_id FK
+    uuid protocol_id FK
+    uuid vfd_model_id FK
+  }
+
+  organizations ||--o{ users : has
+  organizations ||--o{ organizations : parent
+
+  projects ||--o{ devices : owns
+  devices ||--o{ telemetry : emits
+  projects ||--o{ telemetry : contains
+
+  projects ||--o{ protocols : has
+  organizations ||--o{ protocols : vendor
+
+  devices ||--o{ credential_history : history
+  devices ||--o{ mqtt_provisioning_jobs : jobs
+  credential_history ||--o{ mqtt_provisioning_jobs : referenced
+
+  states ||--o{ authorities : has
+  projects ||--o{ beneficiaries : includes
+  states ||--o{ beneficiaries : in
+
+  projects ||--o{ vfd_manufacturers : owns
+  vfd_manufacturers ||--o{ vfd_models : makes
+
+  projects ||--o{ protocol_vfd_assignments : configures
+  protocols ||--o{ protocol_vfd_assignments : assigns
+  vfd_models ||--o{ protocol_vfd_assignments : assigned
+
+  projects ||--o{ installations : deploys
+  devices ||--|| installations : deployed_as
+  beneficiaries ||--o{ installations : beneficiary
+  protocols ||--o{ installations : protocol
+  vfd_models ||--o{ installations : vfd

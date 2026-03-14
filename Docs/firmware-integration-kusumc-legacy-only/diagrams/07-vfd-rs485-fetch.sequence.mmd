@@ -1,0 +1,14 @@
+%%{init: {'theme': 'forest'}}%%
+sequenceDiagram
+  autonumber
+  actor FW as Firmware
+  participant API as Go API (device-open)
+  participant DB as Postgres/Timescale
+
+  FW->>API: GET /api/device-open/vfd?imei=...\n(or deviceUuid)
+  API->>DB: Resolve device -> installation -> vfd_model_id
+  DB-->>API: vfd model record(s)\nrs485 + command_dictionary + fault_map
+  API-->>FW: 200 JSON vfdModels[]
+
+  FW->>FW: Configure RS485 UART params\n(baud/parity/stopbits/slave_id)
+  FW->>FW: Use command_dictionary for Modbus register writes\n+ realtime_parameters for reads

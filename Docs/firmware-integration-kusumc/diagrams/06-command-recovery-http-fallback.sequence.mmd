@@ -1,0 +1,20 @@
+%%{init: {'theme': 'forest'}}%%
+sequenceDiagram
+  autonumber
+  actor FW as Firmware
+  participant API as Go API (device-open)
+  participant DB as Postgres/Timescale
+
+  FW->>FW: Detect MQTT interruption / reboot
+  FW->>API: GET /api/device-open/commands/status?imei=...
+  API->>DB: Summarize command state counts
+  DB-->>API: statusCounts + retry posture
+  API-->>FW: 200 JSON status
+
+  FW->>API: GET /api/device-open/commands/history?imei=...&limit=20
+  API->>DB: Fetch recent commands
+  DB-->>API: commands[] + nextCursor
+  API-->>FW: 200 JSON commands
+
+  FW->>FW: Execute any unprocessed commands
+  FW->>API: (normal path) Publish ack/resp via MQTT after reconnect

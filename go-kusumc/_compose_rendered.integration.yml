@@ -1,0 +1,258 @@
+name: go-kusumc
+services:
+  emqx:
+    environment:
+      EMQX_ALLOW_ANONYMOUS: "false"
+      EMQX_AUTHN__PASSWORD_BASED__1__BACKEND: built_in_database
+      EMQX_AUTHN__PASSWORD_BASED__1__MECHANISM: password
+      EMQX_AUTHN__PASSWORD_BASED__1__PASSWORD_HASH_ALGORITHM: bcrypt
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: public
+      EMQX_DASHBOARD__DEFAULT_USERNAME: admin
+      EMQX_LISTENERS__SSL__DEFAULT__BIND: 0.0.0.0:8883
+      EMQX_LISTENERS__SSL__DEFAULT__CERTFILE: /opt/emqx/certs/server.crt
+      EMQX_LISTENERS__SSL__DEFAULT__KEYFILE: /opt/emqx/certs/server.key
+      EMQX_MGMT__DEFAULT_APPLICATION__ID: admin
+      EMQX_MGMT__DEFAULT_APPLICATION__SECRET: EmqxDash-h2N7qV5xJ9pT
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - emqx_ctl status
+      timeout: 10s
+      interval: 10s
+      retries: 12
+    image: emqx/emqx:5.3
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 1883
+        published: "1884"
+        protocol: tcp
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 18083
+        published: "18083"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: C:\Project-Play\Unified-IoT-Portal-18-Jan\rms-go\go-kusumc\infra\nginx\certs
+        target: /opt/emqx/certs
+        read_only: true
+        bind:
+          create_host_path: true
+  emqx-bootstrapper:
+    depends_on:
+      emqx:
+        condition: service_healthy
+        required: true
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - set -euo pipefail; export PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; /usr/local/go/bin/go run ./cmd/bootstrap_emqx
+    environment:
+      EMQX_API_URL: http://emqx:18083/api/v5
+      EMQX_APP_ID: admin
+      EMQX_APP_SECRET: EmqxDash-h2N7qV5xJ9pT
+      EMQX_DASHBOARD_PASSWORD: public
+      EMQX_DASHBOARD_USER: admin
+      EMQX_FALLBACK_APP_ID: admin
+      EMQX_FALLBACK_APP_SECRET: EmqxDash-h2N7qV5xJ9pT
+      GOTOOLCHAIN: auto
+      PATH: /usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      SERVICE_MQTT_PASSWORD: change-me
+      SERVICE_MQTT_PUB_TOPICS: +/ondemand,channels/+/alerts
+      SERVICE_MQTT_SUB_TOPICS: +/heartbeat,+/data,+/daq,+/ondemand,+/errors,channels/+/messages/+,devices/+/telemetry,channels/+/commands/+/resp,channels/+/commands/+/ack,channels/+/alerts
+      SERVICE_MQTT_USERNAME: backend-service
+    image: golang:1.24-bullseye
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: C:\Project-Play\Unified-IoT-Portal-18-Jan\rms-go\go-kusumc
+        target: /workspace
+        bind:
+          create_host_path: true
+    working_dir: /workspace
+  nginx:
+    depends_on:
+      emqx:
+        condition: service_started
+        required: true
+      server:
+        condition: service_started
+        required: true
+    image: nginx:alpine
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "80"
+        protocol: tcp
+      - mode: ingress
+        target: 443
+        published: "443"
+        protocol: tcp
+      - mode: ingress
+        target: 8883
+        published: "8883"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: C:\Project-Play\Unified-IoT-Portal-18-Jan\rms-go\go-kusumc\infra\nginx\nginx.conf
+        target: /etc/nginx/nginx.conf
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: C:\Project-Play\Unified-IoT-Portal-18-Jan\rms-go\go-kusumc\infra\nginx\certs
+        target: /etc/nginx/certs
+        read_only: true
+        bind:
+          create_host_path: true
+  redis:
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      timeout: 3s
+      interval: 5s
+      retries: 5
+    image: redis:7-alpine
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 6379
+        published: "6380"
+        protocol: tcp
+  server:
+    build:
+      context: C:\Project-Play\Unified-IoT-Portal-18-Jan\rms-go\go-kusumc
+      dockerfile: Dockerfile
+    depends_on:
+      emqx:
+        condition: service_healthy
+        required: true
+      emqx-bootstrapper:
+        condition: service_completed_successfully
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+      timescaledb:
+        condition: service_healthy
+        required: true
+    environment:
+      AUTH_SECRET: dev-secret
+      EMQX_API_URL: http://emqx:18083/api/v5
+      EMQX_APP_ID: admin
+      EMQX_APP_SECRET: EmqxDash-h2N7qV5xJ9pT
+      EMQX_AUTHZ_SOURCE_ID: built_in_database
+      EMQX_DASHBOARD_PASSWORD: public
+      EMQX_DASHBOARD_USER: admin
+      GO_PORT: "8081"
+      MQTT_COMPAT_TOPICS_ENABLED: "false"
+      MQTT_HOST: emqx
+      MQTT_JOB_POLL_INTERVAL_MS: "250"
+      MQTT_PORT: "1883"
+      MQTT_PUBLIC_HOST: emqx
+      MQTT_PUBLIC_PORT: "1883"
+      MQTT_PUBLIC_PROTOCOL: mqtt
+      MQTT_URL: tcp://emqx:1883
+      REDIS_URL: redis://redis:6379
+      SERVICE_MQTT_PASSWORD: change-me
+      SERVICE_MQTT_USERNAME: backend-service
+      TIMESCALE_URI: postgres://postgres:password@timescaledb:5432/telemetry?sslmode=disable
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8081
+        published: "8081"
+        protocol: tcp
+  test-runner:
+    depends_on:
+      server:
+        condition: service_started
+        required: true
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - set -euo pipefail; export PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; apt-get update && apt-get install -y netcat-openbsd postgresql-client; until pg_isready -h timescaledb -p 5432 -U postgres; do echo "waiting for db"; sleep 2; done; psql "postgres://postgres:password@timescaledb:5432/telemetry?sslmode=disable" -c "insert into projects (id, name, config) values ('test-project','Test Project','{}') on conflict (id) do nothing;"; psql "postgres://postgres:password@timescaledb:5432/telemetry?sslmode=disable" -c "insert into command_catalog (name, scope, project_id, payload_schema, transport) select 'E2E_Set','project','test-project','{}'::jsonb,'mqtt' where not exists (select 1 from command_catalog where project_id='test-project' and name='E2E_Set');"; until getent hosts server >/dev/null 2>&1 && nc -z server 8081; do echo "waiting for server"; sleep 2; done; /usr/local/go/bin/go test -tags=integration ./tests/e2e -count=1
+    environment:
+      BASE_URL: http://server:8081
+      GOTOOLCHAIN: auto
+      MQTT_BROKER: mqtt://emqx:1883
+      MQTT_PASSWORD: change-me
+      MQTT_URL: tcp://emqx:1883
+      MQTT_USERNAME: backend-service
+      PATH: /usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PROJECT_ID: test-project
+      TIMESCALE_URI: postgres://postgres:password@timescaledb:5432/telemetry?sslmode=disable
+    image: golang:1.24
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: C:\Project-Play\Unified-IoT-Portal-18-Jan\rms-go\go-kusumc
+        target: /workspace
+        bind:
+          create_host_path: true
+    working_dir: /workspace
+  timescaledb:
+    environment:
+      POSTGRES_DB: telemetry
+      POSTGRES_PASSWORD: password
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres
+      timeout: 5s
+      interval: 5s
+      retries: 10
+    image: timescale/timescaledb:latest-pg15
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 5432
+        published: "5433"
+        protocol: tcp
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - type: bind
+        source: C:\Project-Play\Unified-IoT-Portal-18-Jan\rms-go\go-kusumc\schemas\v1_init.sql
+        target: /docker-entrypoint-initdb.d/01_init.sql
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: C:\Project-Play\Unified-IoT-Portal-18-Jan\rms-go\go-kusumc\schemas\v1_verticals.sql
+        target: /docker-entrypoint-initdb.d/02_verticals.sql
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: C:\Project-Play\Unified-IoT-Portal-18-Jan\rms-go\go-kusumc\schemas\v2_credential_history.sql
+        target: /docker-entrypoint-initdb.d/03_credential_history.sql
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: C:\Project-Play\Unified-IoT-Portal-18-Jan\rms-go\go-kusumc\schemas\v7_command_control.sql
+        target: /docker-entrypoint-initdb.d/04_command_control.sql
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: C:\Project-Play\Unified-IoT-Portal-18-Jan\rms-go\go-kusumc\schemas\v8_mesh_nodes.sql
+        target: /docker-entrypoint-initdb.d/05_mesh_nodes.sql
+        read_only: true
+        bind:
+          create_host_path: true
+networks:
+  default:
+    name: go-kusumc_default

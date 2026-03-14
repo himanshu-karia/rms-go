@@ -1,0 +1,494 @@
+-- V1.1 Schema Initialization Script
+-- Target: TimescaleDB (PostgreSQL 14+)
+
+-- 1. Enable Extensions
+CREATE EXTENSION IF NOT EXISTS ltree;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 2. Organizations (Hierarchy)
+CREATE TABLE IF NOT EXISTS organizations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    type TEXT NOT NULL, -- 'govt', 'private', 'vendor' (Dynamic)
+    path ltree,         -- 'India.Maha.Pune' for fast hierarchy search
+    parent_id UUID REFERENCES organizations(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS path_idx ON organizations USING GIST (path);
+
+-- 3. Link Roles (Governance)
+CREATE TABLE IF NOT EXISTS link_roles (
+    slug TEXT PRIMARY KEY,
+    description TEXT,
+    is_unique_per_device BOOLEAN DEFAULT false
+);
+
+-- Seed Default Roles
+INSERT INTO link_roles (slug, description, is_unique_per_device) VALUES 
+('owner', 'Legal Owner of the Asset', true),
+('maintainer', 'Technical Support / Field Ops', false),
+('auditor', 'Third Party Auditor', false),
+('manufacturer', 'Hardware OEM', true)
+ON CONFLICT (slug) DO NOTHING;
+
+-- Project DNA sensor CSV version snapshots (added 2026-01-02)
+CREATE TABLE IF NOT EXISTS dna_sensor_versions (
+    id BIGSERIAL PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT 'draft',
+    status TEXT NOT NULL DEFAULT 'draft',
+    imported_count INTEGER NOT NULL DEFAULT 0,
+    csv_data BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    published_at TIMESTAMPTZ,
+    rolled_back_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_dna_sensor_versions_project_created
+    ON dna_sensor_versions (project_id, created_at DESC);
+
+-- 3b. Users (Auth)
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'viewer',
+    org_id UUID REFERENCES organizations(id),
+    
+    -- ACL: List of Project IDs this user can access. 
+    -- If role='admin', this might be ignored (Super Admin).
+    -- If role='operator', restricted to these.
+    allowed_projects JSONB DEFAULT '[]', 
+    
+    active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Projects (The DNA)
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY, -- 'health_01'
+    name TEXT NOT NULL,
+    -- Added columns to satisfy seeder inserts
+    type TEXT,
+    location TEXT,
+    config JSONB NOT NULL DEFAULT '{}', -- Zero-Code Hardware Definition
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS project_dna (
+    project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    payload_rows JSONB NOT NULL DEFAULT '[]'::jsonb,
+    edge_rules JSONB NOT NULL DEFAULT '[]'::jsonb,
+    virtual_sensors JSONB NOT NULL DEFAULT '[]'::jsonb,
+    automation_flows JSONB NOT NULL DEFAULT '[]'::jsonb,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_dna_updated_at ON project_dna (updated_at);
+
+CREATE TABLE IF NOT EXISTS payload_sensors (
+    project_id       TEXT        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    param            TEXT        NOT NULL,
+    label            TEXT        NOT NULL,
+    unit             TEXT        NULL,
+    min_value        DOUBLE PRECISION NULL,
+    max_value        DOUBLE PRECISION NULL,
+    resolution       DOUBLE PRECISION NULL,
+    required         BOOLEAN     NOT NULL DEFAULT FALSE,
+    notes            TEXT        NULL,
+    topic_template   TEXT        NULL,
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (project_id, param)
+);
+
+CREATE TABLE IF NOT EXISTS telemetry_thresholds (
+    project_id  TEXT        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    param       TEXT        NOT NULL,
+    scope       TEXT        NOT NULL CHECK (scope IN ('project','device')),
+    device_id   TEXT        NOT NULL DEFAULT '',
+    warn_low    DOUBLE PRECISION NULL,
+    warn_high   DOUBLE PRECISION NULL,
+    alert_low   DOUBLE PRECISION NULL,
+    alert_high  DOUBLE PRECISION NULL,
+    origin      TEXT        NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (project_id, param, scope, device_id),
+    CHECK ((scope = 'project' AND device_id = '') OR (scope = 'device' AND device_id <> ''))
+);
+
+CREATE INDEX IF NOT EXISTS idx_payload_sensors_project ON payload_sensors(project_id);
+CREATE INDEX IF NOT EXISTS idx_thresholds_project_param ON telemetry_thresholds(project_id, param);
+CREATE INDEX IF NOT EXISTS idx_thresholds_device ON telemetry_thresholds(project_id, device_id) WHERE scope = 'device';
+
+-- 5. Devices (Assets)
+CREATE TABLE IF NOT EXISTS devices (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    imei TEXT UNIQUE NOT NULL,
+    project_id TEXT REFERENCES projects(id),
+    
+    -- Dynamic Attributes
+    attributes JSONB DEFAULT '{}', -- Location, Firmware Ver, Install Date
+    
+    -- Shadow State (Last Known)
+    shadow JSONB DEFAULT '{}',
+    last_seen TIMESTAMPTZ
+);
+
+-- Add missing device metadata columns for seeders
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS status TEXT;
+
+-- 6. Device Links (The Multi-Party Graph)
+CREATE TABLE IF NOT EXISTS device_links (
+    device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
+    org_id UUID REFERENCES organizations(id),
+    role TEXT REFERENCES link_roles(slug),
+    
+    PRIMARY KEY (device_id, org_id, role)
+);
+
+-- 7. Telemetry (The Firehose)
+CREATE TABLE IF NOT EXISTS telemetry (
+    time TIMESTAMPTZ NOT NULL,
+    device_id UUID NOT NULL, -- No FK Constraint for speed? Or keep it? Timescale recs: Keep it simple.
+    project_id TEXT NOT NULL,
+    data JSONB NOT NULL,
+    type TEXT DEFAULT 'data'
+);
+
+-- Convert to Hypertable
+SELECT create_hypertable('telemetry', 'time', if_not_exists => TRUE);
+
+-- Compression Policy (Save Disk) - Compress chunks older than 7 days
+ALTER TABLE telemetry SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'device_id'
+);
+SELECT add_compression_policy('telemetry', INTERVAL '7 days', if_not_exists => TRUE);
+
+-- 8. Phase 1 Updates (Gap Recovery)
+ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'verified';
+ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS hops INTEGER DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS anomalies (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_id UUID NOT NULL, -- Logical Link to devices table? Or just UUID to allow loose coupling?
+    type TEXT NOT NULL,      -- 'trend_up', 'threshold', 'spike'
+    field TEXT NOT NULL,
+    value DOUBLE PRECISION,
+    severity TEXT,           -- 'critical', 'warning'
+    description TEXT,
+    detected_at TIMESTAMPTZ DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS analytics_jobs (
+    job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id TEXT,
+    query TEXT,
+    params JSONB,
+    status TEXT DEFAULT 'pending', -- 'pending', 'processing', 'completed', 'failed'
+    results JSONB,
+    error TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ
+);
+
+-- 9. Phase 2 Updates (Service Injection)
+CREATE TABLE IF NOT EXISTS rules (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id TEXT NOT NULL,
+    device_id TEXT, -- Optional (Global vs Specific)
+    name TEXT NOT NULL,
+    trigger JSONB NOT NULL, -- { "metric": "temp", "op": ">", "val": 50 }
+    actions JSONB NOT NULL, -- [{ "type": "alert", "msg": "High Temp" }]
+    enabled BOOLEAN DEFAULT true,
+    execution_location TEXT DEFAULT 'cloud', -- 'cloud' or 'edge'
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ota_campaigns (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    project_type TEXT,
+    version TEXT NOT NULL,
+    url TEXT NOT NULL,
+    checksum TEXT,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS schedules (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    cron_expression TEXT,
+    time TIMESTAMPTZ, -- For one-off scheduled jobs
+    command JSONB NOT NULL, -- { "cmd": "pump_on" }
+    is_active BOOLEAN DEFAULT true,
+    last_run TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_id UUID, -- No FK enforcement for speed
+    project_id TEXT,
+    message TEXT,
+    severity TEXT, -- 'info', 'warning', 'critical'
+    status TEXT,   -- 'active', 'resolved'
+    triggered_at TIMESTAMPTZ DEFAULT NOW(),
+    resolved_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS command_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_id UUID,
+    command TEXT,
+    payload JSONB,
+    completed_at TIMESTAMPTZ
+);
+
+-- 10. Phase 5 Updates (ERP Application Layer)
+
+-- A. WORK ORDERS
+CREATE TABLE IF NOT EXISTS work_orders (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ticket_id TEXT UNIQUE NOT NULL, -- Human Readable "WO-2025-001"
+    title TEXT NOT NULL,
+    description TEXT,
+    device_id TEXT NOT NULL, -- Linked Asset
+    priority TEXT DEFAULT 'MEDIUM', -- LOW, MEDIUM, HIGH, CRITICAL
+    status TEXT DEFAULT 'OPEN', -- OPEN, IN_PROGRESS, RESOLVED, CLOSED
+    assigned_to TEXT, -- User UUID
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- B. INVENTORY
+CREATE TABLE IF NOT EXISTS products (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    sku TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT DEFAULT 'GRAIN',
+    unit TEXT DEFAULT 'kg',
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS stock_levels (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    product_id UUID REFERENCES products(id),
+    location_id TEXT NOT NULL, -- Warehouse/Geofence ID
+    quantity NUMERIC DEFAULT 0,
+    last_updated TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(product_id, location_id)
+);
+
+-- C. LOGISTICS (Trips & Geofences)
+CREATE TABLE IF NOT EXISTS trips (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    trip_id TEXT UNIQUE NOT NULL, -- "TRIP-2025-001"
+    project_id TEXT NOT NULL,
+    vehicle_id TEXT,
+    status TEXT DEFAULT 'SCHEDULED',
+    route JSONB, -- Array of Checkpoints
+    start_time TIMESTAMPTZ,
+    end_time TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS geofences (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    type TEXT, -- 'warehouse', 'depot', 'customer'
+    polygon JSONB, -- GeoJSON or Point Array
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- D. MASTER DATA & STATES
+CREATE TABLE IF NOT EXISTS master_data (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    type TEXT NOT NULL, -- 'crop_types', 'soil_types'
+    name TEXT NOT NULL,
+    code TEXT NOT NULL,
+    project_id TEXT,
+    is_active BOOLEAN DEFAULT true,
+    UNIQUE(type, code, project_id)
+);
+
+CREATE TABLE IF NOT EXISTS states (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    iso_code TEXT,
+    metadata JSONB
+);
+
+-- E. TRAFFIC
+CREATE TABLE IF NOT EXISTS traffic_cameras (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    device_id TEXT UNIQUE, -- Link to R-Node
+    location TEXT, -- Lat,Lng string or JSON
+    status TEXT DEFAULT 'online',
+    stream_url TEXT
+);
+
+-- 11. Phase 8 Updates (Advanced Configuration)
+
+-- A. AUTOMATION FLOWS (Visual Builder)
+CREATE TABLE IF NOT EXISTS automation_flows (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id TEXT UNIQUE NOT NULL, -- One main flow per project for V1
+    version TEXT DEFAULT '1.0.0',
+    nodes JSONB NOT NULL, -- Array of Node-RED style nodes
+    edges JSONB NOT NULL, -- Array of connections
+    deployed_at TIMESTAMPTZ,
+    deployed_by TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- B. DEVICE PROFILES (Hardware Definitions)
+CREATE TABLE IF NOT EXISTS device_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT UNIQUE NOT NULL, -- 'Danfoss VLT Micro'
+    manufacturer TEXT,
+    protocol TEXT NOT NULL, -- 'MODBUS_RTU', 'LORAWAN'
+    
+    -- Deep Config
+    registers JSONB, -- Modbus Map
+    decoder_script TEXT, -- JS Payload Decoder
+    lora_config JSONB,
+    comm_settings JSONB,
+    
+    version INT DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 12. Phase 9 Updates (Vertical Domains)
+
+-- A. AGRICULTURE & INSTALLATIONS (Beneficiaries)
+CREATE TABLE IF NOT EXISTS beneficiaries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    type TEXT DEFAULT 'individual', -- individual, organization
+    phone TEXT,
+    email TEXT,
+    address JSONB, -- { street, village, district, state }
+    state_id TEXT, -- Ref to State
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- B. INSTALLATIONS (Device Deployment)
+CREATE TABLE IF NOT EXISTS installations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_id UUID NOT NULL, -- Logical link to devices
+    project_id TEXT NOT NULL,
+    beneficiary_id UUID REFERENCES beneficiaries(id),
+    
+    geo_location JSONB, -- { lat, lng }
+    status TEXT DEFAULT 'active', -- active, decommissioned
+    activated_at TIMESTAMPTZ DEFAULT NOW(),
+    decommissioned_at TIMESTAMPTZ,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- C. HEALTHCARE
+CREATE TABLE IF NOT EXISTS patients (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    patient_id TEXT UNIQUE NOT NULL, -- "P-1001"
+    project_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    age INT,
+    gender TEXT,
+    assigned_doctor_id TEXT,
+    medical_history TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS medical_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id TEXT UNIQUE NOT NULL, -- "SESS-123456"
+    patient_id TEXT REFERENCES patients(patient_id),
+    device_id TEXT NOT NULL,
+    doctor_id TEXT,
+    status TEXT DEFAULT 'ACTIVE', -- ACTIVE, COMPLETED
+    vitals JSONB,
+    notes TEXT,
+    start_time TIMESTAMPTZ DEFAULT NOW(),
+    end_time TIMESTAMPTZ
+);
+
+-- D. GIS
+CREATE TABLE IF NOT EXISTS gis_layers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    type TEXT, -- LINE, POLYGON, POINT
+    geojson JSONB NOT NULL,
+    style JSONB, -- { color, weight }
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+
+
+-- 13. Round 3 Updates (Utilities)
+
+-- A. MQTT PROVISIONING JOBS
+CREATE TABLE IF NOT EXISTS mqtt_provisioning_jobs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
+    status TEXT DEFAULT 'pending', -- 'pending', 'processing', 'completed', 'failed'
+    attempt_count INT DEFAULT 0,
+    next_attempt_at TIMESTAMPTZ DEFAULT NOW(),
+    last_error TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for Worker Polling
+CREATE INDEX IF NOT EXISTS idx_mqtt_jobs_status_next ON mqtt_provisioning_jobs (status, next_attempt_at);
+
+-- B. STATE AUTHORITIES (Agri)
+CREATE TABLE IF NOT EXISTS authorities (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    state_id UUID REFERENCES states(id),
+    type TEXT, -- 'mseb', 'irrigation', 'pwd'
+    contact_info JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- C. SCHEDULES (Missing Relation Fix)
+
+
+CREATE INDEX IF NOT EXISTS idx_schedules_active ON schedules(is_active);
+CREATE INDEX IF NOT EXISTS idx_schedules_time ON schedules(time);
+
+-- 14. Phase 10: API Keys (Machine-to-Machine Auth)
+CREATE TABLE IF NOT EXISTS api_keys (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL, -- "Zapier Prod"
+    key_hash TEXT NOT NULL, -- BCrypt Hash of the key
+    prefix TEXT NOT NULL, -- "ak_1234" (first 7 chars for ID)
+    project_id TEXT, -- Optional (Global or Project Scoped)
+    scopes JSONB DEFAULT '[]', -- ["read:telemetry", "write:command"]
+    is_active BOOLEAN DEFAULT true,
+    last_used_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID -- User ID
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(prefix);
+

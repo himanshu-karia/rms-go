@@ -1,0 +1,76 @@
+Get:1 http://deb.debian.org/debian trixie InRelease [140 kB]
+Get:2 http://deb.debian.org/debian trixie-updates InRelease [47.3 kB]
+Get:3 http://deb.debian.org/debian-security trixie-security InRelease [43.4 kB]
+Get:4 http://deb.debian.org/debian trixie/main amd64 Packages [9670 kB]
+Get:5 http://deb.debian.org/debian trixie-updates/main amd64 Packages [5412 B]
+Get:6 http://deb.debian.org/debian-security trixie-security/main amd64 Packages [112 kB]
+Fetched 10.0 MB in 10s (983 kB/s)
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following additional packages will be installed:
+  libpq5 postgresql-client-17 postgresql-client-common
+Suggested packages:
+  postgresql-17 postgresql-doc-17
+The following NEW packages will be installed:
+  libpq5 netcat-openbsd postgresql-client postgresql-client-17
+  postgresql-client-common
+0 upgraded, 5 newly installed, 0 to remove and 22 not upgraded.
+Need to get 2377 kB of archives.
+After this operation, 12.1 MB of additional disk space will be used.
+Get:1 http://deb.debian.org/debian-security trixie-security/main amd64 libpq5 amd64 17.8-0+deb13u1 [228 kB]
+Get:2 http://deb.debian.org/debian trixie/main amd64 netcat-openbsd amd64 1.229-1 [42.5 kB]
+Get:3 http://deb.debian.org/debian trixie/main amd64 postgresql-client-common all 278 [47.1 kB]
+Get:4 http://deb.debian.org/debian-security trixie-security/main amd64 postgresql-client-17 amd64 17.8-0+deb13u1 [2046 kB]
+Get:5 http://deb.debian.org/debian trixie/main amd64 postgresql-client all 17+278 [14.0 kB]
+Fetched 2377 kB in 1s (1995 kB/s)
+Selecting previously unselected package libpq5:amd64.
+(Reading database ... 
+(Reading database ... 5%
+(Reading database ... 10%
+(Reading database ... 15%
+(Reading database ... 20%
+(Reading database ... 25%
+(Reading database ... 30%
+(Reading database ... 35%
+(Reading database ... 40%
+(Reading database ... 45%
+(Reading database ... 50%
+(Reading database ... 55%
+(Reading database ... 60%
+(Reading database ... 65%
+(Reading database ... 70%
+(Reading database ... 75%
+(Reading database ... 80%
+(Reading database ... 85%
+(Reading database ... 90%
+(Reading database ... 95%
+(Reading database ... 100%
+(Reading database ... 16723 files and directories currently installed.)
+Preparing to unpack .../libpq5_17.8-0+deb13u1_amd64.deb ...
+Unpacking libpq5:amd64 (17.8-0+deb13u1) ...
+Selecting previously unselected package netcat-openbsd.
+Preparing to unpack .../netcat-openbsd_1.229-1_amd64.deb ...
+Unpacking netcat-openbsd (1.229-1) ...
+Selecting previously unselected package postgresql-client-common.
+Preparing to unpack .../postgresql-client-common_278_all.deb ...
+Unpacking postgresql-client-common (278) ...
+Selecting previously unselected package postgresql-client-17.
+Preparing to unpack .../postgresql-client-17_17.8-0+deb13u1_amd64.deb ...
+Unpacking postgresql-client-17 (17.8-0+deb13u1) ...
+Selecting previously unselected package postgresql-client.
+Preparing to unpack .../postgresql-client_17+278_all.deb ...
+Unpacking postgresql-client (17+278) ...
+Setting up postgresql-client-common (278) ...
+Setting up netcat-openbsd (1.229-1) ...
+update-alternatives: using /bin/nc.openbsd to provide /bin/nc (nc) in auto mode
+Setting up libpq5:amd64 (17.8-0+deb13u1) ...
+Setting up postgresql-client-17 (17.8-0+deb13u1) ...
+update-alternatives: using /usr/share/postgresql/17/man/man1/psql.1.gz to provide /usr/share/man/man1/psql.1.gz (psql.1.gz) in auto mode
+Setting up postgresql-client (17+278) ...
+Processing triggers for libc-bin (2.41-12) ...
+timescaledb:5432 - accepting connections
+INSERT 0 1
+INSERT 0 1
+ok  	ingestion-go/tests/e2e	70.290s

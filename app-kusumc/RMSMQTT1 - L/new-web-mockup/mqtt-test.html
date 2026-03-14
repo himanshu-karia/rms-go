@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Library Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 50px; 
+            background: #121212; 
+            color: white; 
+        }
+        .status { 
+            padding: 20px; 
+            border-radius: 8px; 
+            margin: 10px 0; 
+            font-weight: bold; 
+        }
+        .success { background: #2d5a2d; color: #4caf50; }
+        .error { background: #5a2d2d; color: #f44336; }
+        .warning { background: #5a5a2d; color: #ff9800; }
+        button { 
+            padding: 12px 24px; 
+            background: #4caf50; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin: 10px 5px; 
+        }
+        button:hover { background: #45a049; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        #console { 
+            background: #1e1e1e; 
+            border: 1px solid #444; 
+            padding: 15px; 
+            border-radius: 4px; 
+            height: 200px; 
+            overflow-y: auto; 
+            font-family: monospace; 
+            font-size: 12px; 
+        }
+    </style>
+</head>
+<body>
+    <h1>MQTT.js Library Test</h1>
+    
+    <div id="status" class="status warning">Checking MQTT.js library...</div>
+    
+    <div>
+        <h3>Library Information:</h3>
+        <p><strong>Expected CDN:</strong> https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js</p>
+    <p><strong>Fallback CDN:</strong> https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js</p>
+    <p><strong>Note:</strong> Mosquitto WebSocket requires the <code>/mqtt</code> path (e.g., <code>wss://test.mosquitto.org:8081/mqtt</code>)</p>
+    </div>
+    
+    <div>
+        <button id="testConnection" onclick="testMqttConnection()" disabled>Test MQTT Connection</button>
+        <button onclick="clearConsole()">Clear Console</button>
+    </div>
+    
+    <h3>Console Output:</h3>
+    <div id="console"></div>
+    
+    <!-- Primary MQTT.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    
+    <script>
+        const statusDiv = document.getElementById('status');
+        const consoleDiv = document.getElementById('console');
+        const testButton = document.getElementById('testConnection');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#f44336' : type === 'success' ? '#4caf50' : '#ffffff';
+            consoleDiv.innerHTML += `<div style="color: ${color};">[${timestamp}] ${message}</div>`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            console.log(`[${timestamp}] ${message}`);
+        }
+        
+        function clearConsole() {
+            consoleDiv.innerHTML = '';
+        }
+        
+        function testMqttConnection() {
+            log('Testing MQTT connection to public brokers...');
+            
+            if (typeof mqtt === 'undefined') {
+                log('MQTT library not available!', 'error');
+                return;
+            }
+            
+            const testBrokers = [
+                { name: 'HiveMQ (WSS)', url: 'wss://broker.hivemq.com:8884/mqtt' },
+                { name: 'HiveMQ (WS)', url: 'ws://broker.hivemq.com:8000/mqtt' },
+                { name: 'EMQX (WS)', url: 'ws://broker.emqx.io:8083/mqtt' },
+                { name: 'Mosquitto (WSS)', url: 'wss://test.mosquitto.org:8081/mqtt' },
+                { name: 'Mosquitto (WS)', url: 'ws://test.mosquitto.org:8080/mqtt' }
+            ];
+            
+            let currentIndex = 0;
+            
+            function tryNextBroker() {
+                if (currentIndex >= testBrokers.length) {
+                    log('❌ All broker tests completed', 'error');
+                    return;
+                }
+                
+                const broker = testBrokers[currentIndex];
+                log(`Testing ${broker.name}: ${broker.url}`);
+                
+                try {
+                    const client = mqtt.connect(broker.url, {
+                        clientId: 'mqtt-test-' + Math.random().toString(16).substr(2, 8),
+                        clean: true,
+                        connectTimeout: 8000,
+                        keepalive: 30
+                    });
+                    
+                    client.on('connect', () => {
+                        log(`✅ ${broker.name} - Successfully connected!`, 'success');
+                        client.end();
+                        currentIndex++;
+                        setTimeout(tryNextBroker, 1000);
+                    });
+                    
+                    client.on('error', (error) => {
+                        log(`❌ ${broker.name} - Error: ${error.message}`, 'error');
+                        client.end();
+                        currentIndex++;
+                        setTimeout(tryNextBroker, 1000);
+                    });
+                    
+                    setTimeout(() => {
+                        if (!client.connected) {
+                            log(`⏰ ${broker.name} - Connection timeout`, 'error');
+                            client.end(true);
+                            currentIndex++;
+                            setTimeout(tryNextBroker, 1000);
+                        }
+                    }, 8000);
+                    
+                } catch (error) {
+                    log(`❌ ${broker.name} - Exception: ${error.message}`, 'error');
+                    currentIndex++;
+                    setTimeout(tryNextBroker, 1000);
+                }
+            }
+            
+            tryNextBroker();
+        }
+        
+        // Check library availability
+        window.addEventListener('load', function() {
+            log('Page loaded, checking MQTT.js library...');
+            
+            if (typeof mqtt === 'undefined') {
+                log('❌ MQTT.js library not loaded, trying fallback...', 'error');
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'MQTT.js library not loaded - trying fallback...';
+                
+                // Load fallback
+                const fallbackScript = document.createElement('script');
+                fallbackScript.src = 'https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js';
+                fallbackScript.onload = function() {
+                    if (typeof mqtt !== 'undefined') {
+                        log('✅ Fallback MQTT.js loaded successfully!', 'success');
+                        statusDiv.className = 'status success';
+                        statusDiv.textContent = `MQTT.js loaded via fallback (v${mqtt.VERSION || 'unknown'})`;
+                        testButton.disabled = false;
+                    }
+                };
+                fallbackScript.onerror = function() {
+                    log('❌ Both CDN sources failed!', 'error');
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = 'Both MQTT.js CDN sources failed to load';
+                };
+                document.head.appendChild(fallbackScript);
+                
+            } else {
+                log(`✅ MQTT.js library loaded successfully! Version: ${mqtt.VERSION || 'unknown'}`, 'success');
+                statusDiv.className = 'status success';
+                statusDiv.textContent = `MQTT.js loaded successfully (v${mqtt.VERSION || 'unknown'})`;
+                testButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

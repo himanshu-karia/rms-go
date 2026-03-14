@@ -1,0 +1,89 @@
+=== RUN   TestBootstrapConnectPersist
+    bootstrap_connect_persist_test.go:37: set BOOTSTRAP_URL, BOOTSTRAP_IMEI, and TIMESCALE_URI to run this test
+--- SKIP: TestBootstrapConnectPersist (0.00s)
+=== RUN   TestLiveBootstrapTLS
+    bootstrap_tls_live_test.go:18: set BOOTSTRAP_URL and BOOTSTRAP_IMEI to run live TLS bootstrap check
+--- SKIP: TestLiveBootstrapTLS (0.00s)
+=== RUN   TestDeviceCommandLifecycle
+    device_command_lifecycle_test.go:136: telemetry not persisted: present=false err=context deadline exceeded
+--- FAIL: TestDeviceCommandLifecycle (30.47s)
+=== RUN   TestDeviceConfigurationApply
+--- PASS: TestDeviceConfigurationApply (0.22s)
+=== RUN   TestDeviceLifecycle
+    device_lifecycle_test.go:268: status did not reach acked for dc4d2140-43d3-47b3-a969-ce517a492b6d
+--- FAIL: TestDeviceLifecycle (15.72s)
+=== RUN   TestDeviceOpenAliasCoverage
+--- PASS: TestDeviceOpenAliasCoverage (0.56s)
+=== RUN   TestKusumFullCycle
+--- PASS: TestKusumFullCycle (3.81s)
+=== RUN   TestMQTTCredRotation
+--- PASS: TestMQTTCredRotation (2.42s)
+=== RUN   TestMQTTRotationForcesDisconnect
+--- PASS: TestMQTTRotationForcesDisconnect (1.29s)
+=== RUN   TestRMSMegaFlow
+=== RUN   TestRMSMegaFlow/auth_rbac
+=== PAUSE TestRMSMegaFlow/auth_rbac
+=== RUN   TestRMSMegaFlow/masterdata_org_project_protocol_dna
+=== PAUSE TestRMSMegaFlow/masterdata_org_project_protocol_dna
+=== RUN   TestRMSMegaFlow/scenario_seed_project_protocol_dna
+=== RUN   TestRMSMegaFlow/device_lifecycle_bootstrap
+=== RUN   TestRMSMegaFlow/command_catalog
+=== RUN   TestRMSMegaFlow/commands_roundtrip
+=== RUN   TestRMSMegaFlow/telemetry_ingest_retention
+=== RUN   TestRMSMegaFlow/rules_virtual_sensors
+=== RUN   TestRMSMegaFlow/analytics_dashboards
+=== RUN   TestRMSMegaFlow/negative_validation
+=== RUN   TestRMSMegaFlow/cleanup_consistency
+=== CONT  TestRMSMegaFlow/auth_rbac
+=== CONT  TestRMSMegaFlow/masterdata_org_project_protocol_dna
+    rms_megaflow_test.go:95: state creation endpoint unstable (status=500); skipping master data CRUD
+--- PASS: TestRMSMegaFlow (1.91s)
+    --- PASS: TestRMSMegaFlow/scenario_seed_project_protocol_dna (0.10s)
+    --- PASS: TestRMSMegaFlow/device_lifecycle_bootstrap (0.08s)
+    --- PASS: TestRMSMegaFlow/command_catalog (0.01s)
+    --- PASS: TestRMSMegaFlow/commands_roundtrip (0.02s)
+    --- PASS: TestRMSMegaFlow/telemetry_ingest_retention (1.67s)
+    --- PASS: TestRMSMegaFlow/rules_virtual_sensors (0.01s)
+    --- PASS: TestRMSMegaFlow/analytics_dashboards (0.01s)
+    --- PASS: TestRMSMegaFlow/negative_validation (0.00s)
+    --- PASS: TestRMSMegaFlow/cleanup_consistency (0.02s)
+    --- SKIP: TestRMSMegaFlow/masterdata_org_project_protocol_dna (0.07s)
+    --- PASS: TestRMSMegaFlow/auth_rbac (0.07s)
+=== RUN   TestSolarRMSFullCycle
+--- PASS: TestSolarRMSFullCycle (3.71s)
+=== RUN   TestStory_FullCycle
+    story_test.go:19: ≡ƒôû PROJECT SENTINEL: THE GO CHAPTER TEST SUITE
+    story_test.go:58: ≡ƒôû Chapter 1: The Idea (Auth Setup)
+    story_test.go:73: ≡ƒôû Chapter 2: The Definition (Project Setup)
+    story_test.go:80: 
+        ≡ƒôû Chapter 3: The First Breath (Connection)
+    story_test.go:83:    ≡ƒôí Ingested: Distance 2.5m
+    story_test.go:88: 
+        ≡ƒôû Chapter 5: The Anomaly (Debug Payload)
+    story_test.go:90:    ΓÜá∩╕Å Sent Malformed Payload
+    story_test.go:94: 
+        ≡ƒôû Chapter 7-11: The Topologies
+    story_test.go:101:    ≡ƒö╣ Scenario A (Direct): R-Neuron-01
+    story_test.go:101:    ≡ƒö╣ Scenario B (Neuron+Node): Node_Bedroom
+    story_test.go:101:    ≡ƒö╣ Scenario C (Daisy Chain): Node_Garden
+    story_test.go:107: 
+        ≡ƒôû Chapter 12: The Failover (Blackout)
+    story_test.go:112:    Γ£à Failover Signal Ingested.
+    story_test.go:116: 
+        ≡ƒôû Chapter 14-17: Hybrid Rules (Simulated Downlink)
+    story_test.go:123:    ΓÜí Rule Created on Backend.
+    story_test.go:127: 
+        ≡ƒôû Chapter 21: The Virtual Sensor (Advanced Transformation)
+    story_test.go:137:    (Skipping Config Injection - Verified Unit Test 'transformer_test.go' for Virtual Mode)
+    story_test.go:141: 
+        ≡ƒôû Chapter 22: Schema Evolution
+    story_test.go:144:    ≡ƒôí Ingested payload with unknown field. System accepted (Flexible Schema).
+    story_test.go:54: 
+           ≡ƒÄë Simulation Complete. The System is Verified.
+--- PASS: TestStory_FullCycle (0.25s)
+=== RUN   TestUIAndDeviceOpenFullCycle
+    ui_device_open_fullcycle_test.go:128: device-open status validation failed: statusCounts missing in command status payload
+--- FAIL: TestUIAndDeviceOpenFullCycle (0.71s)
+FAIL
+FAIL	ingestion-go/tests/e2e	61.160s
+FAIL

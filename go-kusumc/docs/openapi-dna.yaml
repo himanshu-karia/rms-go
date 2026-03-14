@@ -1,0 +1,313 @@
+openapi: 3.0.3
+info:
+  title: Unified IoT DNA API
+  version: 1.0.0
+  description: DNA sensors, thresholds, and versions management.
+servers:
+  - url: /api
+paths:
+  /project-dna/{projectId}/sensors:
+    get:
+      summary: List canonical sensors
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Sensors list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sensors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DnaSensor'
+    put:
+      summary: Upsert canonical sensors
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sensors:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/DnaSensor'
+      responses:
+        '200': { description: Saved }
+  /project-dna/{projectId}/sensors/import:
+    post:
+      summary: Import sensors from CSV
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported:
+                    type: integer
+                  updated:
+                    type: integer
+                  errors:
+                    type: array
+                    items:
+                      type: string
+  /project-dna/{projectId}/thresholds:
+    get:
+      summary: Get thresholds (project or device)
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - in: query
+          name: device
+          schema:
+            type: string
+          description: Optional device id for overrides
+      responses:
+        '200':
+          description: Thresholds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThresholdResponse'
+    put:
+      summary: Upsert project thresholds
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                thresholds:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Threshold'
+      responses:
+        '200': { description: Saved }
+  /project-dna/{projectId}/thresholds/{deviceId}:
+    put:
+      summary: Upsert device override thresholds
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - in: path
+          name: deviceId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                thresholds:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Threshold'
+      responses:
+        '200': { description: Saved }
+  /project-dna/{projectId}/thresholds/devices:
+    get:
+      summary: List devices with overrides
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Device list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  devices:
+                    type: array
+                    items:
+                      type: string
+  /project-dna/{projectId}/sensors/versions:
+    get:
+      summary: List sensor versions
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Versions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SensorVersion'
+    post:
+      summary: Create sensor version from CSV
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                label:
+                  type: string
+      responses:
+        '200':
+          description: Version created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version_id:
+                    type: integer
+                  imported:
+                    type: integer
+  /project-dna/{projectId}/sensors/versions/{versionId}/publish:
+    post:
+      summary: Publish sensor version
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/VersionId'
+      responses:
+        '200':
+          description: Published
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applied:
+                    type: integer
+                  version_id:
+                    type: integer
+  /project-dna/{projectId}/sensors/versions/{versionId}/rollback:
+    post:
+      summary: Rollback sensor version
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/VersionId'
+      responses:
+        '200':
+          description: Rolled back
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applied:
+                    type: integer
+                  version_id:
+                    type: integer
+  /project-dna/{projectId}/sensors/versions/{versionId}/csv:
+    get:
+      summary: Download sensor version CSV
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/VersionId'
+      responses:
+        '200':
+          description: CSV content
+          content:
+            text/csv:
+              schema:
+                type: string
+  /project-dna/{projectId}/sensors/export:
+    get:
+      summary: Export sensors as CSV
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: CSV export
+          content:
+            text/csv:
+              schema:
+                type: string
+components:
+  parameters:
+    ProjectId:
+      in: path
+      name: projectId
+      required: true
+      schema:
+        type: string
+    VersionId:
+      in: path
+      name: versionId
+      required: true
+      schema:
+        type: integer
+  schemas:
+    DnaSensor:
+      type: object
+      required: [param, label]
+      properties:
+        param: { type: string }
+        label: { type: string }
+        unit: { type: string, nullable: true }
+        min: { type: number, nullable: true }
+        max: { type: number, nullable: true }
+        resolution: { type: number, nullable: true }
+        required: { type: boolean }
+        notes: { type: string, nullable: true }
+        topic_template: { type: string, nullable: true }
+        updated_at: { type: string, format: date-time }
+    Threshold:
+      type: object
+      required: [param]
+      properties:
+        param: { type: string }
+        warn_low: { type: number, nullable: true }
+        warn_high: { type: number, nullable: true }
+        alert_low: { type: number, nullable: true }
+        alert_high: { type: number, nullable: true }
+        origin: { type: string, nullable: true }
+    ThresholdResponse:
+      type: object
+      properties:
+        source: { type: string }
+        thresholds:
+          type: array
+          items: { $ref: '#/components/schemas/Threshold' }
+    SensorVersion:
+      type: object
+      properties:
+        id: { type: integer }
+        project_id: { type: string }
+        label: { type: string }
+        status: { type: string }
+        imported_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string, nullable: true }
+        published_at: { type: string, format: date-time, nullable: true }
+        published_by: { type: string, nullable: true }
+        rolled_back_at: { type: string, format: date-time, nullable: true }
+        rolled_back_by: { type: string, nullable: true }

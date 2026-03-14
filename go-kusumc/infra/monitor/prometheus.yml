@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 5s
+
+rule_files:
+  - alerts.reverify.yml
+
+scrape_configs:
+  - job_name: 'unified_portal_backend'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['unified-iot-portal:4000']
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

@@ -1,0 +1,19 @@
+{
+  "rule": {
+    "name": "rms-bridge",
+    "sql": "SELECT payload as body, topic as orig_topic FROM \"$events/client_received\" WHERE topic =~ '(.*)/(heartbeat|pump|data|daq|ondemand)'",
+    "actions": [
+      {
+        "name": "republish",
+        "params": {
+          "topic": "channels/${project_id}/messages/${imei}",
+          "payload_tmpl": "${json_encode( map_set(body, 'packet_type', packet_type(body, orig_topic)) \\n            |> map_set('project_id', lookup_project_id(body, orig_topic)) \\n            |> map_set('protocol_id', 'rms-v1') \\n            |> map_set('contractor_id', lookup_contractor_id(body)) \\n            |> map_set('supplier_id', lookup_supplier_id(body)) \\n            |> map_set('manufacturer_id', lookup_manufacturer_id(body)) \\n            |> map_set('device_id', lookup_device_id(body, orig_topic)) \\n            |> map_set('imei', extract_imei(orig_topic)) \\n            |> map_set('ts', now_timestamp_ms()) \\n            |> map_set('msg_id', coalesce(body.msgid, body.MSGID, uuid())) ) }"
+        }
+      }
+    ]
+  },
+  "notes": {
+    "packet_type": "derive from suffix: heartbeat|pump|data->pump|daq|ondemand",
+    "placeholders": ["lookup_project_id", "lookup_device_id", "lookup_contractor_id", "lookup_supplier_id", "lookup_manufacturer_id", "extract_imei", "packet_type(body, topic)"]
+  }
+}

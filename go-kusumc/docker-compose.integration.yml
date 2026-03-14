@@ -1,0 +1,177 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    restart: unless-stopped
+    environment:
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=telemetry
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - ./schemas/v1_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./schemas/v1_verticals.sql:/docker-entrypoint-initdb.d/02_verticals.sql:ro
+      - ./schemas/v2_credential_history.sql:/docker-entrypoint-initdb.d/03_credential_history.sql:ro
+      - ./schemas/v7_command_control.sql:/docker-entrypoint-initdb.d/04_command_control.sql:ro
+      - ./schemas/v8_mesh_nodes.sql:/docker-entrypoint-initdb.d/05_mesh_nodes.sql:ro
+
+  emqx:
+    image: emqx/emqx:5.3
+    restart: unless-stopped
+    environment:
+      - EMQX_ALLOW_ANONYMOUS=${EMQX_ALLOW_ANONYMOUS:-false}
+      - EMQX_MGMT__DEFAULT_APPLICATION__ID=${EMQX_APP_ID:-admin}
+      - EMQX_MGMT__DEFAULT_APPLICATION__SECRET=${EMQX_APP_SECRET:-EmqxDash-h2N7qV5xJ9pT}
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD_USER:-admin}
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD_PASSWORD:-public}
+      - EMQX_AUTHN__PASSWORD_BASED__1__MECHANISM=password
+      - EMQX_AUTHN__PASSWORD_BASED__1__BACKEND=built_in_database
+      - EMQX_AUTHN__PASSWORD_BASED__1__PASSWORD_HASH_ALGORITHM=bcrypt
+      - EMQX_LISTENERS__SSL__DEFAULT__BIND=0.0.0.0:8883
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__KEYFILE=/opt/emqx/certs/server.key
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE=/opt/emqx/certs/server.crt
+    ports:
+      - "1884:1883"
+      - "127.0.0.1:18083:18083"
+    healthcheck:
+      test: ["CMD-SHELL", "emqx_ctl status"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    volumes:
+      - ./infra/nginx/certs:/opt/emqx/certs:ro
+
+  server:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+      emqx:
+        condition: service_healthy
+      emqx-bootstrapper:
+        condition: service_completed_successfully
+    environment:
+      - GO_PORT=8081
+      - AUTH_SECRET=${AUTH_SECRET:-dev-secret}
+      - BOOTSTRAP_RATE_LIMIT_MAX=1000
+      - BOOTSTRAP_RATE_LIMIT_WINDOW_SEC=30
+      - REDIS_URL=redis://redis:6379
+      - TIMESCALE_URI=postgres://postgres:password@timescaledb:5432/telemetry?sslmode=disable
+      - MQTT_URL=tcp://emqx:1883
+      - MQTT_HOST=emqx
+      - MQTT_PORT=1883
+      - MQTT_COMPAT_TOPICS_ENABLED=false
+      - MQTT_JOB_POLL_INTERVAL_MS=250
+      - INGEST_DEADLETTER_REPLAY_ENABLED=${INGEST_DEADLETTER_REPLAY_ENABLED:-true}
+      - INGEST_DEADLETTER_REPLAY_INTERVAL_MS=${INGEST_DEADLETTER_REPLAY_INTERVAL_MS:-5000}
+      - INGEST_DEADLETTER_REPLAY_BATCH=${INGEST_DEADLETTER_REPLAY_BATCH:-100}
+      - INGEST_DEADLETTER_REQUEUE_MAX=${INGEST_DEADLETTER_REQUEUE_MAX:-10000}
+      - INGEST_DEADLETTER_REQUEUE_TTL_HOURS=${INGEST_DEADLETTER_REQUEUE_TTL_HOURS:-168}
+      - SERVICE_MQTT_USERNAME=${SERVICE_MQTT_USERNAME:-backend-service}
+      - SERVICE_MQTT_PASSWORD=${SERVICE_MQTT_PASSWORD:-change-me}
+      # Integration tests run with TLS-insecure enabled, so advertise the nginx MQTTS endpoint.
+      - MQTT_PUBLIC_PROTOCOL=mqtts
+      - MQTT_PUBLIC_HOST=nginx
+      - MQTT_PUBLIC_PORT=8883
+      - EMQX_APP_ID=${EMQX_APP_ID:-admin}
+      - EMQX_APP_SECRET=${EMQX_APP_SECRET:-EmqxDash-h2N7qV5xJ9pT}
+      - EMQX_API_URL=${EMQX_API_URL:-http://emqx:18083/api/v5}
+      - EMQX_AUTHZ_SOURCE_ID=${EMQX_AUTHZ_SOURCE_ID:-built_in_database}
+      - EMQX_DASHBOARD_USER=${EMQX_DASHBOARD_USER:-admin}
+      - EMQX_DASHBOARD_PASSWORD=${EMQX_DASHBOARD_PASSWORD:-public}
+    ports:
+      - "8081:8081"
+    networks:
+      default:
+        aliases:
+          - ingestion-go
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      - server
+      - emqx
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8883:8883"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/certs:/etc/nginx/certs:ro
+
+  emqx-bootstrapper:
+    image: golang:1.24-bullseye
+    restart: on-failure
+    working_dir: /workspace
+    depends_on:
+      emqx:
+        condition: service_healthy
+    environment:
+      - PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - GOTOOLCHAIN=auto
+      - EMQX_API_URL=${EMQX_API_URL:-http://emqx:18083/api/v5}
+      - EMQX_APP_ID=${EMQX_APP_ID:-admin}
+      - EMQX_APP_SECRET=${EMQX_APP_SECRET:-EmqxDash-h2N7qV5xJ9pT}
+      - EMQX_FALLBACK_APP_ID=${EMQX_FALLBACK_APP_ID:-admin}
+      - EMQX_FALLBACK_APP_SECRET=${EMQX_FALLBACK_APP_SECRET:-EmqxDash-h2N7qV5xJ9pT}
+      - EMQX_DASHBOARD_USER=${EMQX_DASHBOARD_USER:-admin}
+      - EMQX_DASHBOARD_PASSWORD=${EMQX_DASHBOARD_PASSWORD:-public}
+      - SERVICE_MQTT_USERNAME=${SERVICE_MQTT_USERNAME:-backend-service}
+      - SERVICE_MQTT_PASSWORD=${SERVICE_MQTT_PASSWORD:-change-me}
+      - SERVICE_MQTT_PUB_TOPICS=${SERVICE_MQTT_PUB_TOPICS:-+/ondemand,channels/+/alerts}
+      - SERVICE_MQTT_SUB_TOPICS=${SERVICE_MQTT_SUB_TOPICS:-+/heartbeat,+/data,+/daq,+/ondemand,+/errors,channels/+/messages/+,devices/+/telemetry,device/+/connected,channels/+/commands/+/resp,channels/+/commands/+/ack,channels/+/alerts}
+    volumes:
+      - ./:/workspace
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - set -euo pipefail; export PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; /usr/local/go/bin/go run ./cmd/bootstrap_emqx
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test-runner
+    working_dir: /workspace
+    depends_on:
+      server:
+        condition: service_started
+    environment:
+      - PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - GOTOOLCHAIN=auto
+      - PROJECT_ID=test-project
+      - BASE_URL=http://server:8081
+      - BOOTSTRAP_URL=http://server:8081/api/bootstrap
+      - HTTP_TLS_INSECURE=true
+      - MQTT_TLS_INSECURE=true
+      - MQTT_URL=tcp://emqx:1883
+      - MQTT_BROKER=mqtt://emqx:1883
+      - MQTT_USERNAME=${SERVICE_MQTT_USERNAME:-backend-service}
+      - MQTT_PASSWORD=${SERVICE_MQTT_PASSWORD:-change-me}
+      - TIMESCALE_URI=postgres://postgres:password@timescaledb:5432/telemetry?sslmode=disable
+    volumes:
+      - ./:/workspace
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - set -euo pipefail; export PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; until pg_isready -h timescaledb -p 5432 -U postgres; do echo "waiting for db"; sleep 2; done; psql "postgres://postgres:password@timescaledb:5432/telemetry?sslmode=disable" -c "insert into projects (id, name, config) values ('test-project','Test Project','{}') on conflict (id) do nothing;"; psql "postgres://postgres:password@timescaledb:5432/telemetry?sslmode=disable" -c "insert into command_catalog (name, scope, project_id, payload_schema, transport) select 'E2E_Set','project','test-project','{}'::jsonb,'mqtt' where not exists (select 1 from command_catalog where project_id='test-project' and name='E2E_Set');"; until getent hosts server >/dev/null 2>&1 && nc -z server 8081; do echo "waiting for server"; sleep 2; done; /usr/local/go/bin/go test -tags=integration ./tests/e2e -count=1

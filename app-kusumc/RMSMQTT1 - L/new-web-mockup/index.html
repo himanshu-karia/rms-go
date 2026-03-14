@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PMKUSUM IoT Monitor</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Primary MQTT.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <!-- Fallback MQTT.js CDN -->
+    <script>
+        window.addEventListener('load', function() {
+            if (typeof mqtt === 'undefined') {
+                console.log('Primary MQTT.js CDN failed, loading fallback...');
+                const fallbackScript = document.createElement('script');
+                fallbackScript.src = 'https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js';
+                fallbackScript.onerror = function() {
+                    console.error('Both MQTT.js CDN sources failed to load');
+                    alert('MQTT library could not be loaded. Please check your internet connection and refresh the page.');
+                };
+                document.head.appendChild(fallbackScript);
+            } else {
+                console.log('MQTT.js library loaded successfully');
+            }
+        });
+    </script>
+</head>
+<body>
+    <!-- Top App Bar -->
+    <header class="app-bar">
+        <button class="menu-button" onclick="toggleDrawer()">
+            <i class="fas fa-bars"></i>
+        </button>
+        <h1 class="app-title">PMKUSUM IoT Monitor</h1>
+    </header>
+
+    <!-- Navigation Drawer -->
+    <div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+    <nav class="navigation-drawer" id="navigation-drawer">
+        <div class="drawer-header">
+            <h3>Navigation</h3>
+            <button class="close-drawer" onclick="closeDrawer()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="drawer-items">
+            <a href="#" class="drawer-item active" data-screen="home">
+                <i class="fas fa-home"></i>
+                <span>Home</span>
+            </a>
+            <a href="#" class="drawer-item" data-screen="ux-dashboard">
+                <i class="fas fa-dashboard"></i>
+                <span>UX-Dash</span>
+            </a>
+            <a href="#" class="drawer-item" data-screen="ux-graphs">
+                <i class="fas fa-chart-line"></i>
+                <span>UX-Graphs</span>
+            </a>
+            <a href="#" class="drawer-item" data-screen="dashboard">
+                <i class="fas fa-star"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="#" class="drawer-item" data-screen="raw-data">
+                <i class="fas fa-tools"></i>
+                <span>Raw Data</span>
+            </a>
+            <a href="#" class="drawer-item" data-screen="settings">
+                <i class="fas fa-cog"></i>
+                <span>Settings</span>
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <!-- Home Screen -->
+        <div class="screen" id="home-screen">
+            <div class="home-container">
+                <div class="app-logo">
+                    <i class="fas fa-solar-panel"></i>
+                </div>
+                <h2>PMKUSUM IoT Demo</h2>
+                <p class="version-info">Version 1.0.0 (Demo)</p>
+                <p class="app-description">
+                    A modern Android application for monitoring and controlling IoT devices in the PMKUSUM solar pump project.
+                </p>
+                
+                <div class="connection-status-card">
+                    <div class="connection-indicator">
+                        <div class="status-dot" id="connection-dot"></div>
+                        <span id="connection-text">Disconnected</span>
+                    </div>
+                    <p class="connection-subtitle">MQTT Connection Status</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- UX Dashboard Screen -->
+        <div class="screen hidden" id="ux-dashboard-screen">
+            <div class="ux-dashboard-container">
+                <h3>UX Dashboard - Real-time Monitoring</h3>
+                
+                <!-- Connection Status Hub (Android-inspired) -->
+                <div class="connection-status-hub">
+                    <div class="connection-indicator">
+                        <div class="connection-icon online">●</div>
+                        <span class="connection-status-text">Online</span>
+                    </div>
+                    <div class="connection-indicator">
+                        <span>Last Update: <span id="last-update-time">--:--:--</span></span>
+                    </div>
+                    <div class="connection-indicator">
+                        <span>Pump Status: <span class="status-indicator running fresh" id="pump-status">Running</span></span>
+                    </div>
+                </div>
+                
+                <!-- Communication Hub -->
+                <div class="parameter-group">
+                    <h4>Communication Hub</h4>
+                    <div class="parameter-grid">
+                        <div class="parameter-card">
+                            <div class="parameter-label">RSSI</div>
+                            <div class="parameter-value" id="ux-rssi">-65 dBm</div>
+                        </div>
+                        <div class="parameter-card">
+                            <div class="parameter-label">Device IMEI</div>
+                            <div class="parameter-value" id="ux-imei">869630050762180</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Power & Battery System -->
+                <div class="parameter-group">
+                    <h4>Power & Battery System</h4>
+                    <div class="gauge-container">
+                        <div class="gauge-item">
+                            <div class="gauge-wrapper">
+                                <canvas class="gauge" id="battery-gauge" width="160" height="160"></canvas>
+                                <div class="gauge-value" id="battery-value">12.5V</div>
+                            </div>
+                            <div class="gauge-label">Battery Voltage</div>
+                        </div>
+                        <div class="gauge-item">
+                            <div class="gauge-wrapper">
+                                <canvas class="gauge" id="temperature-gauge" width="160" height="160"></canvas>
+                                <div class="gauge-value" id="temperature-value">25°C</div>
+                            </div>
+                            <div class="gauge-label">Temperature</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pump Operations -->
+                <div class="parameter-group">
+                    <h4>Pump Operations</h4>
+                    <div class="gauge-grid">
+                        <div class="gauge-item">
+                            <div class="gauge-wrapper">
+                                <canvas class="gauge" id="frequency-gauge" width="140" height="140"></canvas>
+                                <div class="gauge-value" id="frequency-value">50 Hz</div>
+                            </div>
+                            <div class="gauge-label">Frequency</div>
+                        </div>
+                        <div class="gauge-item">
+                            <div class="gauge-wrapper">
+                                <canvas class="gauge" id="power-gauge" width="140" height="140"></canvas>
+                                <div class="gauge-value" id="power-value">2.5 kW</div>
+                            </div>
+                            <div class="gauge-label">Power</div>
+                        </div>
+                        <div class="gauge-item">
+                            <div class="gauge-wrapper">
+                                <canvas class="gauge" id="flow-gauge" width="140" height="140"></canvas>
+                                <div class="gauge-value" id="flow-value">150 L/min</div>
+                            </div>
+                            <div class="gauge-label">Flow Rate</div>
+                        </div>
+                        <div class="gauge-item">
+                            <div class="gauge-wrapper">
+                                <canvas class="gauge" id="current-gauge" width="140" height="140"></canvas>
+                                <div class="gauge-value" id="current-value">5.2 A</div>
+                            </div>
+                            <div class="gauge-label">Current</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Digital I/O Matrix -->
+                <div class="parameter-group">
+                    <h4>Digital I/O Matrix</h4>
+                    <div class="io-matrix">
+                        <div class="io-section">
+                            <h5>Analog Inputs</h5>
+                            <div class="io-grid">
+                                <div class="io-item analog">AI1: <span id="ai1">3.2V</span></div>
+                                <div class="io-item analog">AI2: <span id="ai2">1.8V</span></div>
+                                <div class="io-item analog">AI3: <span id="ai3">4.1V</span></div>
+                                <div class="io-item analog">AI4: <span id="ai4">2.7V</span></div>
+                            </div>
+                        </div>
+                        <div class="io-section">
+                            <h5>Digital I/O</h5>
+                            <div class="io-grid">
+                                <div class="io-item digital active">DI1</div>
+                                <div class="io-item digital">DI2</div>
+                                <div class="io-item digital active">DI3</div>
+                                <div class="io-item digital">DI4</div>
+                                <div class="io-item digital active">DO1</div>
+                                <div class="io-item digital">DO2</div>
+                                <div class="io-item digital">DO3</div>
+                                <div class="io-item digital">DO4</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Energy Monitoring -->
+                <div class="parameter-group">
+                    <h4>Energy Monitoring</h4>
+                    <div class="energy-cards">
+                        <div class="energy-card">
+                            <div class="energy-label">Daily Energy</div>
+                            <div class="energy-value" id="daily-energy">45.2 kWh</div>
+                        </div>
+                        <div class="energy-card">
+                            <div class="energy-label">Total Energy</div>
+                            <div class="energy-value" id="total-energy">1,234 kWh</div>
+                        </div>
+                        <div class="energy-card">
+                            <div class="energy-label">Daily Water</div>
+                            <div class="energy-value" id="daily-water">8,500 L</div>
+                        </div>
+                        <div class="energy-card">
+                            <div class="energy-label">Total Water</div>
+                            <div class="energy-value" id="total-water">125,000 L</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- UX Graphs Screen -->
+        <div class="screen hidden" id="ux-graphs-screen">
+            <div class="graphs-container">
+                <h3>UX Graphs - Live & Historical Trends</h3>
+                <div class="graphs-toolbar">
+                    <div class="mode-group">
+                        <label><input type="radio" name="graph-mode" value="live" checked> Live</label>
+                        <label><input type="radio" name="graph-mode" value="historical"> Historical</label>
+                    </div>
+                    <div class="range-group" id="historical-controls">
+                        <select id="preset-range">
+                            <option value="today">Today</option>
+                            <option value="yesterday">Yesterday</option>
+                            <option value="last7">Last 7 days</option>
+                            <option value="last30">Last 30 days</option>
+                            <option value="custom">Custom...</option>
+                        </select>
+                        <input type="datetime-local" id="start-time" />
+                        <input type="datetime-local" id="end-time" />
+                        <button id="apply-range">Apply</button>
+                    </div>
+                    <div class="file-group">
+                        <label class="file-label">Load CSV/JSON/NDJSON
+                            <input type="file" id="history-file" accept=".csv,.json,.ndjson,application/json,text/csv" />
+                        </label>
+                        <select id="history-mode">
+                            <option value="load-all">Load All</option>
+                            <option value="replay">Replay</option>
+                        </select>
+                        <button id="load-history">Load</button>
+                        <button id="stop-replay" class="secondary">Stop Replay</button>
+                    </div>
+                </div>
+
+                <div class="graph-grid">
+                    <!-- Voltage Series: POPV1, PDC1V1, PDCVOC1 -->
+                    <div class="graph-card">
+                        <div class="graph-title">Voltages: POPV1 (AC Out), PDC1V1 (DC In), PDCVOC1 (DC OC)</div>
+                        <canvas id="graph-voltage"></canvas>
+                    </div>
+                    <!-- DC Current: PDC1I1 -->
+                    <div class="graph-card">
+                        <div class="graph-title">DC Current: PDC1I1</div>
+                        <canvas id="graph-dc-current"></canvas>
+                    </div>
+                    <!-- RSSI Trend -->
+                    <div class="graph-card">
+                        <div class="graph-title">Connectivity: RSSI (Signal Strength)</div>
+                        <canvas id="graph-rssi"></canvas>
+                    </div>
+                    <!-- Status Metrics: PRUNST1, PCNTRMODE1 (stepped) -->
+                    <div class="graph-card">
+                        <div class="graph-title">Status: PRUNST1 (Run), PCNTRMODE1 (Mode)</div>
+                        <canvas id="graph-status"></canvas>
+                    </div>
+                    <!-- Energy/Counters Summary (text only) -->
+                    <div class="graph-card">
+                        <div class="graph-title">Energy & Counters (Latest Value)</div>
+                        <div class="energy-summary-grid">
+                            <div><span class="energy-label">PDKWH1 (Today kWh):</span> <span id="summary-pdkwh1">--</span></div>
+                            <div><span class="energy-label">PTOTKWH1 (Total kWh):</span> <span id="summary-ptotkwh1">--</span></div>
+                            <div><span class="energy-label">POPDWD1 (Today Water):</span> <span id="summary-popdwd1">--</span></div>
+                            <div><span class="energy-label">POPTOTWD1 (Total Water):</span> <span id="summary-poptotwd1">--</span></div>
+                            <div><span class="energy-label">PDHR1 (Today Hours):</span> <span id="summary-pdhr1">--</span></div>
+                            <div><span class="energy-label">PTOTHR1 (Total Hours):</span> <span id="summary-ptothr1">--</span></div>
+                        </div>
+                    </div>
+                    <!-- AI Inputs Mini Graphs -->
+                    <div class="graph-card">
+                        <div class="graph-title">Analog Inputs (AI) Trends</div>
+                        <div class="graph-mini-grid">
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">AI1 (AI11)</div>
+                                <canvas id="graph-ai11" class="mini-canvas"></canvas>
+                            </div>
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">AI2 (AI21)</div>
+                                <canvas id="graph-ai21" class="mini-canvas"></canvas>
+                            </div>
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">AI3 (AI31)</div>
+                                <canvas id="graph-ai31" class="mini-canvas"></canvas>
+                            </div>
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">AI4 (AI41)</div>
+                                <canvas id="graph-ai41" class="mini-canvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Existing Graphs: Frequency/Power, Flow/Current, Battery/Temp, Digital I/O -->
+                    <div class="graph-card">
+                        <div class="graph-title">Frequency (Hz) & Power (kW)</div>
+                        <canvas id="graph-ops1"></canvas>
+                    </div>
+                    <div class="graph-card">
+                        <div class="graph-title">Flow (L/min) & Current (A)</div>
+                        <canvas id="graph-ops2"></canvas>
+                    </div>
+                    <div class="graph-card">
+                        <div class="graph-title">Battery (V) & Temperature (°C)</div>
+                        <canvas id="graph-batt-temp"></canvas>
+                    </div>
+                    <div class="graph-card">
+                        <div class="graph-title">Digital I/O</div>
+                        <div class="graph-mini-grid">
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">DI1 (DI11)</div>
+                                <canvas id="graph-di11" class="mini-canvas"></canvas>
+                            </div>
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">DI2 (DI21)</div>
+                                <canvas id="graph-di21" class="mini-canvas"></canvas>
+                            </div>
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">DI3 (DI31)</div>
+                                <canvas id="graph-di31" class="mini-canvas"></canvas>
+                            </div>
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">DI4 (DI41)</div>
+                                <canvas id="graph-di41" class="mini-canvas"></canvas>
+                            </div>
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">DO1 (DO11)</div>
+                                <canvas id="graph-do11" class="mini-canvas"></canvas>
+                            </div>
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">DO2 (DO21)</div>
+                                <canvas id="graph-do21" class="mini-canvas"></canvas>
+                            </div>
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">DO3 (DO31)</div>
+                                <canvas id="graph-do31" class="mini-canvas"></canvas>
+                            </div>
+                            <div class="graph-mini">
+                                <div class="graph-subtitle">DO4 (DO41)</div>
+                                <canvas id="graph-do41" class="mini-canvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Screen -->
+        <div class="screen hidden" id="dashboard-screen">
+            <div class="dashboard-container">
+                <!-- Tab Navigation -->
+                <div class="tab-navigation">
+                    <button class="tab-button active" data-tab="heartbeat">
+                        <i class="fas fa-heart"></i>
+                        Heartbeat
+                    </button>
+                    <button class="tab-button" data-tab="data">
+                        <i class="fas fa-star"></i>
+                        Data
+                    </button>
+                    <button class="tab-button" data-tab="daq">
+                        <i class="fas fa-tools"></i>
+                        DAQ
+                    </button>
+                    <button class="tab-button" data-tab="ondemand">
+                        <i class="fas fa-cog"></i>
+                        On Demand
+                    </button>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="tab-content">
+                    <!-- Heartbeat Tab -->
+                    <div class="tab-pane active" id="heartbeat-tab">
+                        <div class="data-table-container">
+                            <h4>Device Status & Location Data</h4>
+                            <div class="data-table" id="heartbeat-table">
+                                <div class="no-data">No heartbeat data received yet</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Tab -->
+                    <div class="tab-pane" id="data-tab">
+                        <div class="data-table-container">
+                            <h4>Pump Performance Metrics</h4>
+                            <div class="data-table" id="data-table">
+                                <div class="no-data">No pump data received yet</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DAQ Tab -->
+                    <div class="tab-pane" id="daq-tab">
+                        <div class="data-table-container">
+                            <h4>Data Acquisition System Readings</h4>
+                            <div class="data-table" id="daq-table">
+                                <div class="no-data">No DAQ data received yet</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- On Demand Tab -->
+                    <div class="tab-pane" id="ondemand-tab">
+                        <div class="ondemand-container">
+                            <h4>System Control</h4>
+                            <div class="system-controls">
+                                <button class="ondemand-button" onclick="sendOnDemandRequest()">
+                                    <i class="fas fa-download"></i>
+                                    Request On-Demand Data
+                                </button>
+                            </div>
+                            
+                            <h4>Pump Control</h4>
+                            <div class="pump-controls">
+                                <button class="pump-button pump-on" onclick="sendPumpCommand('ON')">
+                                    <i class="fas fa-power-off"></i>
+                                    Turn ON
+                                </button>
+                                <button class="pump-button pump-off" onclick="sendPumpCommand('OFF')">
+                                    <i class="fas fa-stop"></i>
+                                    Turn OFF
+                                </button>
+                            </div>
+                            
+                            <div class="command-status">
+                                <h5>Latest Command Status</h5>
+                                <div class="status-table" id="command-status-table">
+                                    <div class="no-data">No commands sent yet</div>
+                                </div>
+                                <p class="disclaimer">
+                                    <i class="fas fa-info-circle"></i>
+                                    Note: Responses are simulated for demo purposes
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Raw Data Screen -->
+        <div class="screen hidden" id="raw-data-screen">
+            <div class="raw-data-container">
+                <!-- Tab Navigation -->
+                <div class="tab-navigation">
+                    <button class="tab-button active" data-tab="raw-heartbeat">
+                        <i class="fas fa-heart"></i>
+                        Heartbeat
+                    </button>
+                    <button class="tab-button" data-tab="raw-data">
+                        <i class="fas fa-star"></i>
+                        Data
+                    </button>
+                    <button class="tab-button" data-tab="raw-daq">
+                        <i class="fas fa-tools"></i>
+                        DAQ
+                    </button>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="tab-content">
+                    <div class="tab-pane active" id="raw-heartbeat-tab">
+                        <h4>Raw Heartbeat Messages</h4>
+                        <div class="raw-data-list" id="raw-heartbeat-list">
+                            <div class="no-data">No raw heartbeat data received yet</div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane" id="raw-data-tab">
+                        <h4>Raw Pump Data Messages</h4>
+                        <div class="raw-data-list" id="raw-data-list">
+                            <div class="no-data">No raw pump data received yet</div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane" id="raw-daq-tab">
+                        <h4>Raw DAQ Messages</h4>
+                        <div class="raw-data-list" id="raw-daq-list">
+                            <div class="no-data">No raw DAQ data received yet</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Screen -->
+        <div class="screen hidden" id="settings-screen">
+            <div class="settings-container">
+                <h3>Settings</h3>
+
+                <!-- MQTT Configuration -->
+                <div class="settings-card">
+                    <h4>MQTT Configuration</h4>
+                    <div class="form-group">
+                        <label for="mqtt-url">Broker URL</label>
+                        <input type="text" id="mqtt-url" value="broker.hivemq.com" />
+                    </div>
+                    <div class="form-group">
+                        <label for="mqtt-port">WebSocket Port</label>
+                        <input type="number" id="mqtt-port" value="8884" />
+                    </div>
+                    <div class="form-group">
+                        <label for="topic-prefix">Topic Prefix (IMEI)</label>
+                        <input type="text" id="topic-prefix" value="869630050762180" />
+                    </div>
+                    <div class="form-group">
+                        <label for="mqtt-username">Username</label>
+                        <input type="text" id="mqtt-username" placeholder="(optional)" />
+                    </div>
+                    <div class="form-group">
+                        <label for="mqtt-password">Password</label>
+                        <input type="password" id="mqtt-password" placeholder="(optional)" />
+                    </div>
+                    <div class="form-group">
+                        <label for="mqtt-client-id">Client ID</label>
+                        <input type="text" id="mqtt-client-id" readonly />
+                        <button class="refresh-button" onclick="generateClientId()">
+                            <i class="fas fa-refresh"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="connection-controls">
+                        <button class="connect-button" id="connect-button" onclick="toggleConnection()">
+                            Connect
+                        </button>
+                        <div class="connection-status">
+                            <span class="status-indicator" id="mqtt-status-indicator"></span>
+                            <span id="mqtt-status-text">Disconnected</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Setup Buttons -->
+                    <div class="quick-setup">
+                        <h5>Quick Setup</h5>
+                        <div class="quick-buttons">
+                            <button class="quick-setup-btn" onclick="setupHiveMQ()">
+                                <i class="fas fa-cloud"></i>
+                                HiveMQ (WSS)
+                            </button>
+                            <button class="quick-setup-btn" onclick="setupMosquitto()">
+                                <i class="fas fa-server"></i>
+                                Mosquitto (WSS)
+                            </button>
+                            <button class="quick-setup-btn" onclick="setupEMQX()">
+                                <i class="fas fa-bolt"></i>
+                                EMQX (WS)
+                            </button>
+                            <button class="quick-setup-btn" onclick="setupLocal()">
+                                <i class="fas fa-home"></i>
+                                Local Broker
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Connection Help -->
+                <div class="settings-card">
+                    <h4>Connection Help</h4>
+                    <div class="help-section">
+                        <h5>Working Public Brokers:</h5>
+                        <ul class="help-list">
+                            <li><strong>broker.hivemq.com:8884</strong> - HiveMQ (Secure WebSocket)</li>
+                            <li><strong>test.mosquitto.org:8081/mqtt</strong> - Mosquitto (Secure WebSocket)</li>
+                            <li><strong>broker.emqx.io:8083</strong> - EMQX (WebSocket)</li>
+                            <li><strong>localhost:8080</strong> - Local development</li>
+                        </ul>
+                        
+                        <h5>Connection Tips:</h5>
+                        <ul class="help-list">
+                            <li>Use <strong>WSS</strong> (Secure WebSocket) for public brokers</li>
+                            <li>Use <strong>WS</strong> (WebSocket) for local/non-secure brokers</li>
+                            <li>Check browser console (F12) for detailed error messages</li>
+                            <li>Some browsers block mixed content (HTTP on HTTPS sites)</li>
+                            <li>Firewalls may block WebSocket connections</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Data Simulation -->
+                <div class="settings-card" id="data-simulation-card" style="display: none;">
+                    <h4>Data Simulation</h4>
+                    <div class="form-group">
+                        <label for="simulation-interval">Sending Interval (seconds)</label>
+                        <input type="number" id="simulation-interval" value="5" min="1" max="60" />
+                    </div>
+                    <div class="simulation-controls">
+                        <button class="simulate-button" id="simulate-button" onclick="toggleSimulation()">
+                            Simulate Data
+                        </button>
+                        <div class="simulation-status">
+                            <span id="simulation-status-text">Stopped</span>
+                            <div class="packet-counter">
+                                Packets Published: <span id="packet-counter">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Export -->
+                <div class="settings-card">
+                    <h4>Data Export</h4>
+                    <div class="export-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Heartbeat Records:</span>
+                            <span class="stat-value" id="heartbeat-count">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Pump Data Records:</span>
+                            <span class="stat-value" id="pump-count">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">DAQ Records:</span>
+                            <span class="stat-value" id="daq-count">0</span>
+                        </div>
+                    </div>
+                    <button class="export-button" onclick="exportData()">
+                        <i class="fas fa-download"></i>
+                        Export All Data as CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>

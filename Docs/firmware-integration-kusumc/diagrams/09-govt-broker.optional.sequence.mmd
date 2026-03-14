@@ -1,0 +1,15 @@
+%%{init: {'theme': 'forest'}}%%
+sequenceDiagram
+  autonumber
+  actor FW as Firmware
+  participant API as Go API
+
+  FW->>API: GET /api/bootstrap?imei=...\n(header x-api-key)
+  API-->>FW: 200 JSON bootstrap\n(optional) govt_broker
+
+  alt Govt broker configured
+    FW->>FW: Connect to govt_broker.endpoints[0]\nusing govt credentials
+    FW->>FW: Publish/subscribe on govt topics as required
+  else Not configured
+    FW->>FW: Skip govt broker logic
+  end

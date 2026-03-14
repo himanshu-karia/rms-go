@@ -1,0 +1,127 @@
+---
+title: Core schema (new-db-schema)
+---
+erDiagram
+  direction LR
+
+  organizations {
+    uuid id PK
+    text name
+    text type
+    ltree path
+    uuid parent_id FK
+  }
+
+  users {
+    uuid id PK
+    text username UK
+    uuid org_id FK
+    jsonb allowed_projects
+  }
+
+  projects {
+    text id PK
+    text name
+    text type
+    text location
+    jsonb config
+  }
+
+  project_dna {
+    text project_id PK,FK
+    jsonb payload_rows
+  }
+
+  payload_sensors {
+    text project_id FK
+    text param
+  }
+
+  telemetry_thresholds {
+    text project_id FK
+    text param
+  }
+
+  dna_sensor_versions {
+    bigint id PK
+    text project_id
+  }
+
+  devices {
+    uuid id PK
+    text imei UK
+    text project_id FK
+    text name
+    text status
+  }
+
+  device_links {
+    uuid device_id FK
+    uuid org_id FK
+    text role
+  }
+
+  telemetry {
+    timestamptz time
+    uuid device_id
+    text project_id
+    jsonb data
+  }
+
+  protocols {
+    uuid id PK
+    text project_id FK
+    uuid server_vendor_org_id FK
+    text kind
+    text protocol
+  }
+
+  device_govt_credentials {
+    uuid id PK
+    uuid device_id FK
+    uuid protocol_id FK
+  }
+
+  mqtt_provisioning_jobs {
+    uuid id PK
+    uuid device_id FK
+    uuid credential_history_id FK
+    text status
+  }
+
+  credential_history {
+    uuid id PK
+    uuid device_id FK
+    jsonb bundle
+    text lifecycle
+  }
+
+  api_keys {
+    uuid id PK
+    text prefix
+    text project_id
+  }
+
+  organizations ||--o{ organizations : parent
+  organizations ||--o{ users : has
+
+  projects ||--|| project_dna : dna
+  projects ||--o{ payload_sensors : defines
+  projects ||--o{ telemetry_thresholds : thresholds
+  projects ||--o{ devices : owns
+
+  devices ||--o{ telemetry : emits
+  projects ||--o{ telemetry : contains
+
+  devices ||--o{ device_links : linked
+  organizations ||--o{ device_links : linked
+
+  projects ||--o{ protocols : has
+  organizations ||--o{ protocols : vendor
+
+  devices ||--o{ device_govt_credentials : creds
+  protocols ||--o{ device_govt_credentials : assigns
+
+  devices ||--o{ credential_history : history
+  devices ||--o{ mqtt_provisioning_jobs : jobs
+  credential_history ||--o{ mqtt_provisioning_jobs : referenced

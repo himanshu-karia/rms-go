@@ -1,0 +1,91 @@
+---
+title: PM-KUSUM vertical (new-db-schema)
+---
+erDiagram
+  direction LR
+
+  projects {
+    text id PK
+  }
+
+  devices {
+    uuid id PK
+    text project_id FK
+  }
+
+  protocols {
+    uuid id PK
+    text project_id FK
+  }
+
+  states {
+    uuid id PK
+    text name
+  }
+
+  authorities {
+    uuid id PK
+    uuid state_id FK
+    text name
+    text type
+  }
+
+  beneficiaries {
+    uuid id PK
+    text project_id FK
+    uuid state_id FK
+    text name
+    text phone
+    text email
+  }
+
+  vfd_manufacturers {
+    uuid id PK
+    text project_id FK
+    text name
+  }
+
+  vfd_models {
+    uuid id PK
+    text project_id FK
+    uuid manufacturer_id FK
+    text model
+    text version
+  }
+
+  protocol_vfd_assignments {
+    uuid id PK
+    text project_id FK
+    uuid protocol_id FK
+    uuid vfd_model_id FK
+  }
+
+  installations {
+    uuid id PK
+    uuid device_id FK
+    text project_id FK
+    uuid beneficiary_id FK
+    uuid protocol_id FK
+    uuid vfd_model_id FK
+    jsonb location
+    text status
+  }
+
+  states ||--o{ authorities : has
+
+  projects ||--o{ beneficiaries : includes
+  states ||--o{ beneficiaries : in
+
+  projects ||--o{ vfd_manufacturers : owns
+  vfd_manufacturers ||--o{ vfd_models : makes
+  projects ||--o{ vfd_models : owns
+
+  projects ||--o{ protocol_vfd_assignments : configures
+  protocols ||--o{ protocol_vfd_assignments : assigns
+  vfd_models ||--o{ protocol_vfd_assignments : assigned
+
+  projects ||--o{ installations : deploys
+  devices ||--|| installations : deployed_as
+  beneficiaries ||--o{ installations : beneficiary
+  protocols ||--o{ installations : protocol
+  vfd_models ||--o{ installations : vfd

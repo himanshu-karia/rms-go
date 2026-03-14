@@ -1,0 +1,18 @@
+%%{init: {'theme': 'forest'}}%%
+flowchart TD
+  A[Sensor Read] --> B[Build payload envelope]
+  B --> C[Include required fields\nimei, project_id, msgid, packet_type, ts/timestamp]
+  C --> D["MQTT PUBLISH\nIMEI/heartbeat"]
+  D --> E{Ack received?}
+  E -->|Yes| F[Continue sampling loop]
+  E -->|No| G[Retry publish with backoff]
+  G --> D
+
+  subgraph Server Side
+    S1[Broker ACL validates topic] --> S2[Go subscriber ingests]
+    S2 --> S3[Transform + validate\nDNA/schema + strict checks]
+    S3 --> S4[Persist telemetry + update shadow/hot cache]
+    S4 --> S5[Rules/alerts/actions]
+  end
+
+  D -.-> S1

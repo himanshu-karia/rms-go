@@ -1,0 +1,20 @@
+%%{init: {'theme': 'forest'}}%%
+flowchart TD
+  A[Gateway receives child-node telemetry] --> B[Repackage forwarded payload]
+  B --> C[Top-level: sensor keys + envelope fields]
+  B --> D[metadata.forwarded=true]
+  B --> E[metadata.origin_node_id=CHILD_NODE_ID\nor metadata.origin_imei=CHILD_IMEI]
+  B --> F[metadata.route.path=array of hop IDs]
+  B --> G[metadata.route.hops=HOP_COUNT]
+  B --> H[metadata.route.ingress=INGRESS_LABEL]
+
+  C --> I["Publish as gateway identity\nGATEWAY_IMEI/data"]
+  D --> I
+  E --> I
+  F --> I
+  G --> I
+  H --> I
+
+  I --> J{Server can recover origin?}
+  J -->|Yes| K[Ingest as forwarded\nlink to origin identity]
+  J -->|No| L[Mark suspicious\nstore diagnostics]

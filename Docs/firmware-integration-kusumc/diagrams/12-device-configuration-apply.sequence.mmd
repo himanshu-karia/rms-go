@@ -1,0 +1,26 @@
+sequenceDiagram
+	autonumber
+	participant UI as UI/Admin
+	participant API as Go API
+	participant DB as Postgres
+	participant MQ as EMQX MQTT
+	participant DEV as Device
+
+	UI->>API: POST /api/devices/:idOrUuid/configuration (config JSON)
+	API->>DB: INSERT device_configurations (status=pending)
+	DB-->>API: config_id
+	API->>MQ: PUBLISH {imei}/ondemand
+	Note over API,MQ: command.name=apply_device_configuration\nmsgid=correlation_id=config_id
+	MQ-->>DEV: DELIVER apply_device_configuration
+	DEV->>DEV: Validate + apply config
+	alt success
+		DEV->>MQ: PUBLISH {imei}/ondemand (ondemand_rsp)
+		Note over DEV,MQ: correlation_id=config_id\nstatus=ack|acked|success
+		MQ-->>API: Deliver response
+		API->>DB: Finalize device_configurations (acknowledged)
+	else failure
+		DEV->>MQ: PUBLISH {imei}/ondemand (ondemand_rsp)
+		Note over DEV,MQ: correlation_id=config_id\nstatus=failed
+		MQ-->>API: Deliver response
+		API->>DB: Finalize device_configurations (failed)
+	end

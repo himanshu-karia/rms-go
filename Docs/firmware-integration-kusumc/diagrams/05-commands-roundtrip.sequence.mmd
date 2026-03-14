@@ -1,0 +1,20 @@
+%%{init: {'theme': 'forest'}}%%
+sequenceDiagram
+  autonumber
+  actor UI as Operator/UI
+  participant API as Go API
+  participant MQ as MQTT Broker
+  actor FW as Firmware
+  participant DB as Postgres/Timescale
+
+  UI->>API: POST /api/commands/send\n(or /api/devices/:deviceUuid/commands)
+  API->>DB: Persist command request (queued/published)
+  API->>MQ: PUBLISH {imei}/ondemand\npacket_type=ondemand_cmd\nmsgid=correlation_id\ncommand.name + payload
+  MQ-->>FW: Deliver command message
+
+  FW->>FW: Execute command
+  FW->>MQ: PUBLISH response\npacket_type=ondemand_rsp\nmsgid/correlation_id match\ncode=0 ack | code=1 error | code=2 wait
+  MQ->>API: Go MQTT subscriber consumes ack/resp
+  API->>DB: Store response + update status\nacked | failed | published(wait)
+
+  Note over FW,API: If MQTT session interrupted, firmware may recover via HTTP fallback endpoints

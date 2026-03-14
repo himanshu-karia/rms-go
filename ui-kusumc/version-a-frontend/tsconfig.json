@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "types": [
+      "node",
+      "vite/client",
+      "vitest/globals",
+      "@testing-library/jest-dom",
+      "@playwright/test"
+    ],
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src",
+    "tests",
+    "vite.config.ts",
+    "postcss.config.cjs",
+    "tailwind.config.ts",
+    ".storybook"
+  ],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}

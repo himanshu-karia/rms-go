@@ -1,0 +1,132 @@
+# Bundle manifest for new-db-schema (staging)
+# Date: 2026-01-07
+#
+# Purpose
+# - Make schema composition explicit (core + optional verticals)
+# - Keep bundles composable by enforcing: vertical -> core FKs only
+#
+# Notes
+# - These files are NOT wired into `unified-go/schemas/` yet.
+# - Intended use is mounting into `/docker-entrypoint-initdb.d/` on a fresh DB volume.
+
+manifest_version: 1
+
+rules:
+  fk_boundary:
+    allowed: "vertical_to_core_only"
+    prohibited: "core_to_vertical"
+  composition:
+    required_bundle: core
+
+bundles:
+  - id: core
+    kind: core
+    sql_file: sql/core.sql
+    depends_on: []
+    tables:
+      - organizations
+      - link_roles
+      - users
+      - api_keys
+      - projects
+      - project_dna
+      - payload_sensors
+      - telemetry_thresholds
+      - dna_sensor_versions
+      - devices
+      - device_links
+      - telemetry
+      - anomalies
+      - analytics_jobs
+      - rules
+      - schedules
+      - alerts
+      - command_logs
+      - ota_campaigns
+      - automation_flows
+      - device_profiles
+      - protocols
+      - device_govt_credentials
+      - mqtt_provisioning_jobs
+      - credential_history
+
+  - id: vertical_pm_kusum
+    kind: vertical
+    sql_file: sql/verticals/pm_kusum.sql
+    depends_on: [core]
+    tables:
+      - states
+      - authorities
+      - beneficiaries
+      - vfd_manufacturers
+      - vfd_models
+      - protocol_vfd_assignments
+      - installations
+    notes:
+      - "VFD catalogue + assignments are currently included in this bundle."
+
+  - id: vertical_healthcare
+    kind: vertical
+    sql_file: sql/verticals/healthcare.sql
+    depends_on: [core]
+    tables:
+      - patients
+      - medical_sessions
+
+  - id: vertical_gis
+    kind: vertical
+    sql_file: sql/verticals/gis.sql
+    depends_on: [core]
+    tables:
+      - gis_layers
+
+  - id: vertical_traffic
+    kind: vertical
+    sql_file: sql/verticals/traffic.sql
+    depends_on: [core]
+    tables:
+      - traffic_cameras
+      - traffic_metrics
+
+  - id: vertical_logistics
+    kind: vertical
+    sql_file: sql/verticals/logistics.sql
+    depends_on: [core]
+    tables:
+      - products
+      - stock_levels
+      - trips
+      - geofences
+
+  - id: vertical_maintenance
+    kind: vertical
+    sql_file: sql/verticals/maintenance.sql
+    depends_on: [core]
+    tables:
+      - work_orders
+
+  - id: vertical_agri_advisory
+    kind: vertical
+    sql_file: sql/verticals/agri_advisory.sql
+    depends_on: [core]
+    tables:
+      - soil_rules
+
+  - id: vertical_master_data
+    kind: vertical
+    sql_file: sql/verticals/master_data.sql
+    depends_on: [core]
+    tables:
+      - master_data
+
+artifacts:
+  diagrams:
+    - id: core
+      mermaid: diagrams/a_core.mmd
+      svg: diagrams/a_core.svg
+    - id: pm_kusum
+      mermaid: diagrams/b_pm_kusum.mmd
+      svg: diagrams/b_pm_kusum.svg
+    - id: core_plus_pm_kusum
+      mermaid: diagrams/c_core_plus_pm_kusum.mmd
+      svg: diagrams/c_core_plus_pm_kusum.svg
