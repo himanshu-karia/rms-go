@@ -19,6 +19,7 @@ Param(
 )
 
 $ErrorActionPreference = 'Stop'
+$env:CLOUDSDK_CORE_DISABLE_PROMPTS = '1'
 
 if ($All) {
     $CreateProject = $true
@@ -65,7 +66,7 @@ function Exec {
     "[exec] $Command" | Tee-Object -FilePath $LogFile -Append | Out-Host
     Invoke-Expression $Command
     if ($LASTEXITCODE -ne 0) {
-        throw "Command failed with exit code $LASTEXITCODE: $Command"
+        throw "Command failed with exit code ${LASTEXITCODE}: $Command"
     }
 }
 
@@ -76,13 +77,13 @@ $saEmail = "$saName@$ProjectId.iam.gserviceaccount.com"
 
 Invoke-Step -Title "Capture current gcloud auth/config" -Action {
     Exec "gcloud auth list"
-    Exec "gcloud config list"
+    Exec "gcloud config list --format='text(core.account,core.project,compute.region,compute.zone)'"
 }
 
 if ($CreateProject) {
     Invoke-Step -Title "Create project + link billing" -Action {
-        Exec "gcloud projects create $ProjectId --name \"$ProjectName\""
-        Exec "gcloud beta billing projects link $ProjectId --billing-account $BillingAccountId"
+        Exec "gcloud projects create $ProjectId --name '$ProjectName'"
+        Exec "gcloud billing projects link $ProjectId --billing-account $BillingAccountId"
     }
 }
 
@@ -109,7 +110,7 @@ if ($EnableApis) {
 
 if ($CreateServiceAccount) {
     Invoke-Step -Title "Create deployment service account" -Action {
-        Exec "gcloud iam service-accounts create $saName --display-name \"RMS GO Deployer\" --project $ProjectId"
+        Exec "gcloud iam service-accounts create $saName --display-name 'RMS GO Deployer' --project $ProjectId"
     }
 }
 

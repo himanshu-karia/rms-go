@@ -18,6 +18,7 @@
 **/build/
 **/coverage/
 **/*.log
+go-kusumc/scripts/secrets/gcp-bootstrap-log-*.txt
 **/tmp/
 **/.cache/
 

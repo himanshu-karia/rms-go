@@ -166,3 +166,45 @@ For every run, append:
 - follow-up action
 
 This keeps the process auditable and repeatable for future environments.
+
+## 12) Executed run (2026-03-15, provided inputs)
+
+Inputs used:
+- `ProjectId`: `rms-go`
+- `BillingAccountId`: `01867F-E32F7F-B132E3`
+- Active account: `himanshuikaria@gmail.com`
+
+Execution summary:
+1. Dry-run executed successfully.
+2. Real apply executed successfully.
+3. Project created and active:
+   - `projectId`: `rms-go`
+   - `name`: `RMS GO`
+   - `projectNumber`: `880473642851`
+4. Billing linked successfully to provided billing account.
+5. Default gcloud config set:
+   - project: `rms-go`
+   - region: `asia-south1`
+   - zone: `asia-south1-a`
+6. Service account created:
+   - `rms-go-deployer@rms-go.iam.gserviceaccount.com`
+7. IAM role bindings applied for service account:
+   - `roles/secretmanager.secretAccessor`
+   - `roles/compute.admin`
+   - `roles/iam.serviceAccountUser`
+   - `roles/dns.admin`
+8. Required APIs enabled (including):
+   - `secretmanager.googleapis.com`
+   - `compute.googleapis.com`
+   - `iam.googleapis.com`
+   - `cloudresourcemanager.googleapis.com`
+   - `dns.googleapis.com`
+   - `certificatemanager.googleapis.com`
+   - `artifactregistry.googleapis.com`
+   - `cloudbuild.googleapis.com`
+
+Trace log file:
+- `go-kusumc/scripts/secrets/gcp-bootstrap-log-20260315-040357.txt`
+
+Notable note observed during run:
+- The previously active project (`rms-go-hkbase-20260315`) lacked Cloud Resource Manager API, which produced warning text during initial config capture. This did not block final provisioning of `rms-go`.
