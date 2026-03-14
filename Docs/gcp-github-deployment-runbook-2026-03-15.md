@@ -208,3 +208,25 @@ Trace log file:
 
 Notable note observed during run:
 - The previously active project (`rms-go-hkbase-20260315`) lacked Cloud Resource Manager API, which produced warning text during initial config capture. This did not block final provisioning of `rms-go`.
+
+## 13) Executed follow-up (secrets + git remote publish)
+
+### Secret publication to GSM
+- Project: `rms-go`
+- Prefix: `rms-go-`
+- Required + optional keys published and versioned.
+- Total RMS-prefixed secrets present after sync: `11`.
+
+Rendered runtime env:
+- Output: `go-kusumc/.env.runtime`
+- Source: Google Secret Manager (`render-env-from-gsm.ps1`)
+- Policy: local-only file, do not commit.
+
+### Git remote publish
+- Remote switched to HTTPS for token-based auth:
+   - `https://github.com/himanshu-karia/rms-go.git`
+- `gh auth setup-git` applied.
+- `main` branch pushed successfully and set to track `origin/main`.
+
+Commit published in this step:
+- `ab6a764` (`bootstrap gcp project and secret workflow automation`)
